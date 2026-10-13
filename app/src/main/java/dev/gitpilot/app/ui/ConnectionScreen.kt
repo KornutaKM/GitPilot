@@ -83,6 +83,9 @@ fun ConnectionScreen(
                         Text("Connected as @" + state.authenticatedAs)
                         Text("Private repositories and write actions depend on GitHub App installation permissions.",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Signing out also clears locally pinned repository identifiers.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                         OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = onSignOut) { Text("Sign out") }
                     } else if (!signInAvailable) {
                         Text("To enable sign-in, register a GitHub App with device flow enabled and configure the GitHub App client ID at build time. Never include a client secret in the app.",

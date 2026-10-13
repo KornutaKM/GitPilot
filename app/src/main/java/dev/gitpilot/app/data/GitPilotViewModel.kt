@@ -78,9 +78,13 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
     private fun invalidateSession() {
         authEpoch += 1
         session.clear()
+        // Repository names may themselves be confidential. Clear locally pinned
+        // identifiers when credentials are revoked or the user explicitly signs out.
+        preferences.edit().remove("pinned_repositories").apply()
         mutable.update {
             it.copy(
-                authenticatedAs = null,
+                authenticatedAs = null, error = null, message = null,
+                deviceCode = null, signingIn = false,
                 workspace = Workspace(emptyList(), emptyList(), emptyList(), emptyMap(), emptyMap()),
                 diffs = emptyMap(), discussion = emptyMap(), loadingDiscussionKey = null,
                 jobs = emptyMap(), jobLogs = emptyMap(),

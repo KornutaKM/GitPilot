@@ -2,7 +2,7 @@
 
 Native GitHub control center built with Kotlin, Jetpack Compose and Material 3.
 
-## Version 1.1.0-alpha
+## Version 1.2.0-alpha
 
 Live public repository browsing now works without a GitHub login. GitHub App Device Flow sign-in and remote operations (reviews, squash merge and retry failed workflow jobs) are implemented; signed-in features require a GitHub App Client ID and installation permissions.
 
@@ -62,7 +62,7 @@ Workspace requests for recent repositories are performed with a concurrency limi
 
 ## Logout and session isolation
 
-Signing out clears the in-memory workspace, private diffs, cached jobs, workflow definitions and encrypted credentials immediately, even while offline. In-flight detail requests use a session generation guard so they cannot reintroduce data from a previous account. Destructive operations are serialized to prevent duplicate submissions from repeated taps. Actual remote mutations still require user confirmation and GitHub permissions.
+Signing out clears the in-memory workspace, private diffs, cached jobs, workflow definitions, encrypted credentials and locally pinned repository identifiers immediately, even while offline. In-flight detail requests use a session generation guard so they cannot reintroduce data from a previous account. Destructive operations are serialized to prevent duplicate submissions from repeated taps. Actual remote mutations still require user confirmation and GitHub permissions.
 
 ## UX improvements
 
@@ -104,3 +104,7 @@ PR files, commit diffs and branch comparisons now render bounded unified patches
 ## Alpha 1.1 — paginated repository discovery
 
 The Repositories screen now offers **Load more repositories** when GitHub returns a full page. Pages are bounded to five per browsing session (up to 60 public or 100 authenticated recent repositories, plus accessible pinned projects). New items are deduplicated by immutable GitHub repository ID and locally pinned entries remain prioritized. Repositories from subsequent pages fetch branches and default-branch commits only when opened, reducing unnecessary API calls. Manual refresh restarts pagination at page one. Background polling and unlimited crawling are intentionally not implemented.
+
+## Alpha 1.2 — Android security and quality gate
+
+GitPilot explicitly disables unencrypted network traffic. Cloud backup and device-transfer policies exclude shared preferences, in addition to disabling application backup. The Android CI workflow now runs the `lintDebug` static analyzer alongside JVM unit tests and APK compilation, preserving HTML/XML lint reports as a separate `GitPilot-lint` artifact. See [SECURITY.md](SECURITY.md) for credential handling, signed log redirects, remote-write expectations, security reporting and remaining alpha risks. For privacy, signing out (or session invalidation) also removes locally pinned repository names.
