@@ -42,7 +42,7 @@ In public mode, remote mutations are disabled. When signed in, every review, mer
 - Up to 12 public or 20 authenticated repositories in the list, with 4 public or 8 authenticated repositories queried for related PRs and Actions.
 - Branch-specific commits load when selecting a branch; individual commit patches load on tap. Creating a remote branch requires authorization and confirmation.
 - PR check status comes from GitHub Checks for a bounded subset of PRs; it remains Unknown if no check data is available.
-- On-demand PR file patches and workflow job lists. Full logs open in GitHub.
+- On-demand PR file patches and workflow job lists. Job log previews show bounded output; full logs remain available on GitHub. Signed log redirects never receive the GitHub bearer token.
 - No push notifications, offline persistent cache, advanced API pagination, rebase or code editor.
 - Anonymous API use is rate limited by GitHub; refresh is manual.
 

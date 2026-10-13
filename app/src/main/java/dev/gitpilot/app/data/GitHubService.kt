@@ -13,6 +13,13 @@ class GitHubApiException(val statusCode: Int, message: String) : IOException(mes
 
 private fun enc(part: String): String = URLEncoder.encode(part, "UTF-8").replace("+", "%20")
 
+/** Only HTTPS signed log-download hosts used by GitHub Actions are eligible. */
+fun isSafeJobLogHost(host: String): Boolean {
+    val normalized = host.lowercase()
+    return normalized.endsWith(".actions.githubusercontent.com") ||
+        normalized.endsWith(".blob.core.windows.net")
+}
+
 class GitHubHttp {
     suspend fun get(path: String, token: String? = null): String =
         exchange("https://api.github.com" + path, "GET", token)
@@ -22,6 +29,72 @@ class GitHubHttp {
 
     suspend fun put(path: String, token: String, json: JSONObject): String =
         exchange("https://api.github.com" + path, "PUT", token, json.toString())
+
+    /**
+     * GitHub responds with a short-lived signed URL for job logs.
+     * The GitHub bearer token is sent ONLY to api.github.com, never to that URL.
+     */
+    suspend fun jobLog(path: String, token: String?): String = withContext(Dispatchers.IO) {
+        val first = URL("https://api.github.com" + path).openConnection() as HttpURLConnection
+        first.instanceFollowRedirects = false
+        first.connectTimeout = 15000
+        first.readTimeout = 20000
+        first.setRequestProperty("Accept", "application/vnd.github+json")
+        first.setRequestProperty("User-Agent", "GitPilot-Android")
+        if (!token.isNullOrBlank()) first.setRequestProperty("Authorization", "Bearer " + token)
+        try {
+            val status = first.responseCode
+            if (status in 200..299) {
+                return@withContext tailOfLog(first)
+            }
+            if (status !in 300..399) throw GitHubApiException(status, "Job logs unavailable: GitHub HTTP " + status)
+            val location = first.getHeaderField("Location") ?: throw IOException("Missing job log redirect")
+            val redirect = URL(location)
+            if (redirect.protocol != "https" || !isSafeJobLogHost(redirect.host)) {
+                throw IOException("Job log redirect host is not trusted. Open logs on GitHub instead.")
+            }
+            val second = redirect.openConnection() as HttpURLConnection
+            second.instanceFollowRedirects = false
+            second.connectTimeout = 15000
+            second.readTimeout = 30000
+            try {
+                if (second.responseCode != 200) throw IOException("Job log download HTTP " + second.responseCode)
+                tailOfLog(second)
+            } finally {
+                second.disconnect()
+            }
+        } finally {
+            first.disconnect()
+        }
+    }
+
+    private fun tailOfLog(connection: HttpURLConnection): String {
+        val capacity = 65536
+        val buffer = ByteArray(capacity)
+        val chunk = ByteArray(8192)
+        var cursor = 0
+        var count = 0L
+        var downloadLimitReached = false
+        connection.inputStream.use { input ->
+            while (count < 5_000_000L) {
+                val read = input.read(chunk)
+                if (read <= 0) break
+                for (i in 0 until read) {
+                    buffer[cursor] = chunk[i]
+                    cursor = (cursor + 1) % capacity
+                }
+                count += read
+            }
+            downloadLimitReached = count >= 5_000_000L
+        }
+        val size = minOf(count, capacity.toLong()).toInt()
+        val output = ByteArray(size)
+        val start = if (count >= capacity) cursor else 0
+        for (i in 0 until size) output[i] = buffer[(start + i) % capacity]
+        val prefix = if (count > capacity) "[Showing recent " + capacity + " bytes of job output]\n" else ""
+        val warning = if (downloadLimitReached) "\n[Preview stopped at 5 MB; open GitHub for full logs.]" else ""
+        return prefix + String(output, Charsets.UTF_8).takeLast(30000) + warning
+    }
 
     suspend fun oauth(path: String, fields: Map<String, String>): JSONObject {
         val form = fields.entries.joinToString("&") { enc(it.key) + "=" + enc(it.value) }
@@ -237,7 +310,7 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
         val array = JSONObject(http.get(path, token)).optJSONArray("jobs") ?: JSONArray()
         return (0 until array.length()).map {
             val item = array.getJSONObject(it)
-            WorkflowStep(item.optString("name"), parseStatus(item.optString("status"), item.optString("conclusion")))
+            WorkflowStep(item.optString("name"), parseStatus(item.optString("status"), item.optString("conclusion")), item.optLong("id"))
         }
     }
 
@@ -279,6 +352,13 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
     suspend fun merge(pr: PullRequestItem, token: String) {
         val path = "/repos/" + enc(pr.owner) + "/" + enc(pr.repo) + "/pulls/" + pr.number + "/merge"
         http.put(path, token, JSONObject().put("sha", pr.headSha).put("merge_method", "squash"))
+    }
+
+    suspend fun fetchJobLog(run: WorkflowRunItem, step: WorkflowStep, token: String?): String {
+        if (step.id <= 0) throw IOException("Missing job identifier")
+        val path = "/repos/" + enc(run.owner) + "/" + enc(run.repo) +
+            "/actions/jobs/" + step.id + "/logs"
+        return http.jobLog(path, token)
     }
 
     suspend fun createBranch(repo: RepositoryItem, sha: String, branch: String, token: String) {

@@ -28,6 +28,8 @@ data class GitPilotState(
     val signingIn: Boolean = false,
     val diffs: Map<String, List<PullRequestFile>> = emptyMap(),
     val jobs: Map<Long, List<WorkflowStep>> = emptyMap(),
+    val jobLogs: Map<Long, String> = emptyMap(),
+    val loadingJobId: Long? = null,
     val branchCommits: Map<String, List<CommitItem>> = emptyMap(),
     val commitFiles: Map<String, List<PullRequestFile>> = emptyMap(),
     val branchLoading: Boolean = false,
@@ -62,7 +64,8 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                 mutable.update {
                     it.copy(workspace = result.workspace, loading = false,
                         authenticatedAs = user, warnings = result.warnings,
-                        diffs = emptyMap(), jobs = emptyMap(), branchCommits = emptyMap(),
+                        diffs = emptyMap(), jobs = emptyMap(), jobLogs = emptyMap(), loadingJobId = null,
+                        branchCommits = emptyMap(),
                         commitFiles = emptyMap(), branchLoading = false, detailLoading = false)
                 }
             } catch (e: Exception) {
@@ -183,6 +186,20 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                 mutable.update { it.copy(diffs = it.diffs + (key to files), detailLoading = false) }
             } catch (e: Exception) {
                 mutable.update { it.copy(detailLoading = false, error = cleanError(e)) }
+            }
+        }
+    }
+
+    fun loadJobLog(run: WorkflowRunItem, step: WorkflowStep) {
+        if (step.id <= 0 || mutable.value.jobLogs.containsKey(step.id)) return
+        viewModelScope.launch {
+            mutable.update { it.copy(loadingJobId = step.id, error = null) }
+            try {
+                val text = service.fetchJobLog(run, step, session.read())
+                mutable.update { it.copy(jobLogs = it.jobLogs + (step.id to text), loadingJobId = null) }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                mutable.update { it.copy(loadingJobId = null, error = cleanError(e)) }
             }
         }
     }

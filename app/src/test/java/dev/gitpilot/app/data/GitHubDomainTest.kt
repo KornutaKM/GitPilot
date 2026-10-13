@@ -1,6 +1,7 @@
 package dev.gitpilot.app.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -26,6 +27,13 @@ class GitHubDomainTest {
         val input = listOf(demo[3], demo[0], demo[1], demo[2])
         val ordered = prioritizeRepositories(input)
         assertEquals(listOf(demo[0].id, demo[1].id, demo[2].id, demo[3].id), ordered.map { it.id })
+    }
+
+    @Test fun jobLogRedirectsUseOnlyKnownDownloadHosts() {
+        assertTrue(isSafeJobLogHost("pipelines.actions.githubusercontent.com"))
+        assertTrue(isSafeJobLogHost("builds.blob.core.windows.net"))
+        assertFalse(isSafeJobLogHost("actions.githubusercontent.com.evil.example"))
+        assertFalse(isSafeJobLogHost("example.org"))
     }
 
     @Test fun unknownDoesNotMeanSuccessful() {

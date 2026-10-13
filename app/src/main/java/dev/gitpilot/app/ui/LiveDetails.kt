@@ -1,12 +1,14 @@
 package dev.gitpilot.app.ui
 
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
@@ -171,6 +173,9 @@ fun LiveWorkflowDetail(
     jobs: List<WorkflowStep>?,
     loading: Boolean,
     authenticated: Boolean,
+    jobLogs: Map<Long, String>,
+    loadingJobId: Long?,
+    onOpenJobLog: (WorkflowStep) -> Unit,
     onRerunFailed: () -> Unit
 ) {
     val browser = LocalUriHandler.current
@@ -212,6 +217,26 @@ fun LiveWorkflowDetail(
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(job.name, modifier = Modifier.weight(1f))
                         Text(job.status.name.lowercase(), color = MaterialTheme.colorScheme.primary)
+                    }
+                    if (job.id > 0) {
+                        OutlinedButton(
+                            enabled = loadingJobId != job.id && !jobLogs.containsKey(job.id),
+                            onClick = { onOpenJobLog(job) }
+                        ) {
+                            Text(if (loadingJobId == job.id) "Loading…" else if (jobLogs.containsKey(job.id)) "Log loaded" else "View job log")
+                        }
+                        val text = jobLogs[job.id]
+                        if (text != null) {
+                            SelectionContainer {
+                                Column(
+                                    Modifier.fillMaxWidth().heightIn(max = 340.dp)
+                                        .verticalScroll(rememberScrollState())
+                                ) {
+                                    Text(text, fontFamily = FontFamily.Monospace,
+                                        style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
                     }
                 }
             }

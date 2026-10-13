@@ -189,6 +189,9 @@ fun GitPilotApp(model: GitPilotViewModel = viewModel()) {
                     LiveWorkflowDetail(
                         run, state.jobs[run.id], state.detailLoading,
                         authenticated = state.authenticatedAs != null,
+                        jobLogs = state.jobLogs,
+                        loadingJobId = state.loadingJobId,
+                        onOpenJobLog = { job -> model.loadJobLog(run, job) },
                         onRerunFailed = { model.rerunFailed(run) }
                     )
                 }

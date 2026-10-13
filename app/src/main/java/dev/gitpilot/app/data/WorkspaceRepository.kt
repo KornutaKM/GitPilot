@@ -48,7 +48,7 @@ data class PullRequestItem(
     val htmlUrl: String = ""
 )
 
-data class WorkflowStep(val name: String, val status: CheckStatus)
+data class WorkflowStep(val name: String, val status: CheckStatus, val id: Long = 0)
 
 data class WorkflowRunItem(
     val id: Long,
