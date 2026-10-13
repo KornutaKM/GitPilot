@@ -33,7 +33,9 @@ data class GitPilotState(
     val branchCommits: Map<String, List<CommitItem>> = emptyMap(),
     val commitFiles: Map<String, List<PullRequestFile>> = emptyMap(),
     val branchLoading: Boolean = false,
-    val detailLoading: Boolean = false
+    val detailLoading: Boolean = false,
+    val definitions: Map<Long, List<WorkflowDefinition>> = emptyMap(),
+    val loadingDefinitionsId: Long? = null
 )
 
 class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
@@ -244,6 +246,35 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         runAuthorized("Pull request merged on GitHub") { token -> service.merge(pr, token) }
     }
 
+
+    fun loadWorkflowDefinitions(repo: RepositoryItem) {
+        if (mutable.value.definitions.containsKey(repo.id)) return
+        viewModelScope.launch {
+            mutable.update { it.copy(loadingDefinitionsId = repo.id, error = null) }
+            try {
+                val definitions = service.listWorkflows(repo, session.read())
+                mutable.update { it.copy(
+                    definitions = it.definitions + (repo.id to definitions),
+                    loadingDefinitionsId = null
+                ) }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                mutable.update { it.copy(loadingDefinitionsId = null, error = cleanError(e)) }
+            }
+        }
+    }
+
+    fun dispatchWorkflow(repo: RepositoryItem, workflow: WorkflowDefinition, ref: String) {
+        val trimmed = ref.trim()
+        if (!validGitRefName(trimmed)) {
+            mutable.update { it.copy(error = "Select a valid branch or tag reference.") }
+            return
+        }
+        runAuthorized("Workflow dispatch accepted by GitHub") { token ->
+            service.dispatchWorkflow(repo, workflow.id, trimmed, token)
+        }
+    }
+
     fun rerunFailed(run: WorkflowRunItem) {
         runAuthorized("GitHub accepted the retry request") { token -> service.rerunFailed(run, token) }
     }
@@ -271,6 +302,7 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
     fun dismissError() { mutable.update { it.copy(error = null) } }
 
     companion object {
+
         fun diffKey(pr: PullRequestItem): String = pr.owner + "/" + pr.repo + "#" + pr.number
         fun branchKey(repo: RepositoryItem, branch: String): String = repo.owner + "/" + repo.name + ":" + branch
         fun commitKey(repo: RepositoryItem, commit: CommitItem): String = repo.owner + "/" + repo.name + "@" + commit.fullSha

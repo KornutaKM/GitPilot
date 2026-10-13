@@ -73,6 +73,15 @@ data class Workspace(
 
 
 /** Keep the API's recency order within pinned and unpinned groups. */
+fun validGitRefName(value: String): Boolean {
+    if (value.isEmpty() || value.length > 120 ||
+        !value.matches(Regex("[A-Za-z0-9._/-]+"))) return false
+    return !value.startsWith("/") && !value.startsWith(".") &&
+        !value.endsWith("/") && !value.endsWith(".") &&
+        !value.endsWith(".lock") && !value.contains("//") &&
+        !value.contains("..") && !value.contains("/.")
+}
+
 fun prioritizeRepositories(repositories: List<RepositoryItem>): List<RepositoryItem> =
     repositories.sortedWith(compareByDescending { it.starred })
 

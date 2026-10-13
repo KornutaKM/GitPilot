@@ -9,7 +9,7 @@ Live public repository browsing now works without a GitHub login. GitHub App Dev
 - Overview: pinned and recent repositories, pull requests and GitHub Actions from live GitHub REST endpoints.
 - Repositories: default-branch and selected-branch history, actual commit patches and confirmed creation of a remote branch from a chosen commit.
 - PRs: real changed-file patches loaded on demand, optional review/comment and merge confirmation.
-- Actions: real workflow runs and on-demand job lists, full-log links, rerun failed jobs with confirmation.
+- Actions: real workflow runs and job logs, rerun failed jobs, and manually dispatch active workflows from a chosen branch or tag (no custom inputs yet).
 - Account: choose public GitHub username, connect/disconnect GitHub App user authorization.
 - Native light/dark theme, manual refresh and visible API errors.
 
@@ -43,7 +43,7 @@ In public mode, remote mutations are disabled. When signed in, every review, mer
 - Branch-specific commits load when selecting a branch; individual commit patches load on tap. Creating a remote branch requires authorization and confirmation.
 - PR check status comes from GitHub Checks for a bounded subset of PRs; it remains Unknown if no check data is available.
 - On-demand PR file patches and workflow job lists. Job log previews show bounded output; full logs remain available on GitHub. Signed log redirects never receive the GitHub bearer token.
-- No push notifications, offline persistent cache, advanced API pagination, rebase or code editor.
+- Manual dispatch is available only for workflows enabled with workflow_dispatch and no required custom inputs. No push notifications, offline persistent cache, advanced API pagination, rebase or code editor.
 - Anonymous API use is rate limited by GitHub; refresh is manual.
 
 ## Code structure

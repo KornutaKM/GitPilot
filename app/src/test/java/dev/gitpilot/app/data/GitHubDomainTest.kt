@@ -36,6 +36,17 @@ class GitHubDomainTest {
         assertFalse(isSafeJobLogHost("example.org"))
     }
 
+    @Test fun workflowDispatchRefValidationRejectsUnsafeNames() {
+        assertTrue(validGitRefName("main"))
+        assertTrue(validGitRefName("release/1.2.0"))
+        assertFalse(validGitRefName("release..bad"))
+        assertFalse(validGitRefName("foo//bar"))
+        assertFalse(validGitRefName("/main"))
+        assertFalse(validGitRefName("main.lock"))
+        assertFalse(validGitRefName("hello world"))
+        assertFalse(validGitRefName(""))
+    }
+
     @Test fun unknownDoesNotMeanSuccessful() {
         assertNotEquals(CheckStatus.SUCCESS, CheckStatus.UNKNOWN)
     }

@@ -173,6 +173,8 @@ class GitHubDeviceAuth(private val http: GitHubHttp = GitHubHttp()) {
     }
 }
 
+data class WorkflowDefinition(val id: Long, val name: String, val active: Boolean)
+
 data class WorkspaceLoadResult(val workspace: Workspace, val warnings: List<String>)
 
 class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
@@ -364,6 +366,23 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
     suspend fun createBranch(repo: RepositoryItem, sha: String, branch: String, token: String) {
         val path = "/repos/" + enc(repo.owner) + "/" + enc(repo.name) + "/git/refs"
         http.post(path, token, JSONObject().put("ref", "refs/heads/" + branch).put("sha", sha))
+    }
+
+
+    suspend fun listWorkflows(repo: RepositoryItem, token: String?): List<WorkflowDefinition> {
+        val path = "/repos/" + enc(repo.owner) + "/" + enc(repo.name) + "/actions/workflows?per_page=100"
+        val response = JSONObject(http.get(path, token)).optJSONArray("workflows") ?: JSONArray()
+        return (0 until response.length()).map { index ->
+            val item = response.getJSONObject(index)
+            WorkflowDefinition(item.getLong("id"), item.optString("name"), item.optString("state") == "active")
+        }.filter { it.active }
+    }
+
+    suspend fun dispatchWorkflow(repo: RepositoryItem, workflowId: Long, ref: String, token: String) {
+        require(workflowId > 0) { "Invalid workflow" }
+        val path = "/repos/" + enc(repo.owner) + "/" + enc(repo.name) +
+            "/actions/workflows/" + workflowId + "/dispatches"
+        http.post(path, token, JSONObject().put("ref", ref).put("inputs", JSONObject()))
     }
 
     suspend fun rerunFailed(run: WorkflowRunItem, token: String) {

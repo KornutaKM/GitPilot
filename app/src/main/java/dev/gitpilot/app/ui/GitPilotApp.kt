@@ -93,6 +93,7 @@ fun GitPilotApp(model: GitPilotViewModel = viewModel()) {
     var tab by rememberSaveable { mutableStateOf(MainTab.HOME) }
     var detail by remember { mutableStateOf<Details?>(null) }
     var connectionScreen by rememberSaveable { mutableStateOf(false) }
+    var workflowLauncherOpen by remember { mutableStateOf(false) }
     val state by model.state.collectAsState()
     val workspace = state.workspace
     val snackbars = remember { SnackbarHostState() }
@@ -104,8 +105,12 @@ fun GitPilotApp(model: GitPilotViewModel = viewModel()) {
             model.consumeMessage()
         }
     }
-    BackHandler(enabled = detail != null || connectionScreen) {
-        if (detail != null) detail = null else connectionScreen = false
+    BackHandler(enabled = detail != null || connectionScreen || workflowLauncherOpen) {
+        when {
+            workflowLauncherOpen -> workflowLauncherOpen = false
+            detail != null -> detail = null
+            else -> connectionScreen = false
+        }
     }
 
     Scaffold(
@@ -202,8 +207,19 @@ fun GitPilotApp(model: GitPilotViewModel = viewModel()) {
                         onWorkflow = { detail = Details.Workflow(it) })
                     MainTab.REPOS -> RepositoriesScreen(workspace.repositories) { detail = Details.Repository(it) }
                     MainTab.PRS -> PullRequestsScreen(workspace.pullRequests) { detail = Details.PullRequest(it) }
-                    MainTab.ACTIONS -> ActionsScreen(workspace.workflows) { detail = Details.Workflow(it) }
+                    MainTab.ACTIONS -> ActionsScreen(workspace.workflows,
+                        onWorkflow = { detail = Details.Workflow(it) },
+                        onLaunch = { workflowLauncherOpen = true },
+                        signedIn = state.authenticatedAs != null)
                 }
+            }
+            if (workflowLauncherOpen) {
+                WorkflowLauncher(
+                    state = state,
+                    onLoad = model::loadWorkflowDefinitions,
+                    onDispatch = model::dispatchWorkflow,
+                    onDismiss = { workflowLauncherOpen = false }
+                )
             }
         }
     }
@@ -594,7 +610,10 @@ private fun WorkflowRow(run: WorkflowRunItem, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ActionsScreen(workflows: List<WorkflowRunItem>, onWorkflow: (Long) -> Unit) {
+private fun ActionsScreen(
+    workflows: List<WorkflowRunItem>, onWorkflow: (Long) -> Unit,
+    onLaunch: () -> Unit, signedIn: Boolean
+) {
     var failedOnly by rememberSaveable { mutableStateOf(false) }
     val visible = workflows.filter { !failedOnly || it.check == CheckStatus.FAILED }
     LazyColumn(
@@ -603,6 +622,11 @@ private fun ActionsScreen(workflows: List<WorkflowRunItem>, onWorkflow: (Long) -
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item { Heading("GitHub Actions", "Inspect checks, workflow runs and failures") }
+        item {
+            Button(onClick = onLaunch, enabled = signedIn, modifier = Modifier.fillMaxWidth()) {
+                Text(if (signedIn) "Run a workflow" else "Connect GitHub to dispatch workflows")
+            }
+        }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = !failedOnly, onClick = { failedOnly = false }, label = { Text("All runs") })
