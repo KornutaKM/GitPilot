@@ -385,6 +385,25 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun commitExistingFile(
+        repo: RepositoryItem, branch: String, preview: GitHubFilePreview,
+        editedText: String, rawCommitMessage: String
+    ) {
+        val original = preview.text ?: run {
+            mutable.update { it.copy(error = "This file cannot be edited.") }
+            return
+        }
+        val message = try {
+            validateFileCommit(original, editedText, rawCommitMessage, preview.blobSha)
+        } catch (e: IllegalArgumentException) {
+            mutable.update { it.copy(error = e.message ?: "Invalid commit.") }
+            return
+        }
+        runAuthorized("File committed on GitHub") { token ->
+            service.updateExistingTextFile(repo, branch, preview, editedText, message, token)
+        }
+    }
+
     fun createPullRequest(repo: RepositoryItem, sourceBranch: String, title: String, body: String) {
         val compared = mutable.value.comparisons[branchKey(repo, sourceBranch)]
         if (compared == null || !compared.canOpenPullRequest) {

@@ -2,12 +2,12 @@
 
 Native GitHub control center built with Kotlin, Jetpack Compose and Material 3.
 
-## Version 0.7.0-alpha
+## Version 0.8.0-alpha
 
 Live public repository browsing now works without a GitHub login. GitHub App Device Flow sign-in and remote operations (reviews, squash merge and retry failed workflow jobs) are implemented; signed-in features require a GitHub App Client ID and installation permissions.
 
 - Overview: pinned and recent repositories, pull requests and GitHub Actions from live GitHub REST endpoints. Pinned projects remain accessible even after dropping out of GitHub recent activity.
-- Repositories: read-only folder navigation and UTF-8 text-file preview in the selected branch, history and commit patches, branch comparisons, branch creation and PR creation.
+- Repositories: read-only folder navigation and UTF-8 text-file preview and single-file commit editing in the selected branch, history and commit patches, branch comparisons, branch creation and PR creation.
 - PRs: real changed-file patches, GitHub conversation and inline review history, public PR comments with a confirmation dialog, review actions, and squash merge.
 - Actions: real workflow runs and job logs, explicit cancellation of running runs, rerun failed jobs, and manually dispatch active workflows from a chosen branch or tag, with up to ten key=value inputs.
 - Account: choose public GitHub username, connect/disconnect GitHub App user authorization.
@@ -85,3 +85,7 @@ Choose a non-default branch on a repository screen to fetch GitHub's base...head
 ## Repository file browser
 
 Repository details now have **Browse files** for the selected branch. GitPilot uses the GitHub Contents API to fetch one directory at a time; no bulk recursive checkout is performed. Folders appear first, filenames are alphabetical, and tapping a file loads a read-only UTF-8 preview. Files above 96 KB, binary files and unsupported encodings show a clear limitation; use **Open file on GitHub**. The first 32,000 characters of text are rendered on the phone. The browser keys its cache by owner, repository, branch and path, and clears private contents on sign-out. File edits and commits are still outside the alpha scope.
+
+## Editing and committing a file
+
+Signed-in users may edit a **complete UTF-8 preview of an existing file** (at most 32,000 characters) and submit a one-file commit on the selected branch. Choose **Edit and commit file**, modify the text, enter a commit message and confirm the remote write. The GitHub Contents API receives the previously fetched file blob SHA: concurrent edits cause a conflict instead of silently overwriting newer content. GitHub enforces Contents write permission and protected-branch rules. The editor refuses unchanged, binary, truncated and oversized files and never stores unsaved edits outside the current screen. Multi-file staging, creating new files, amend/rebase, and conflict resolution are not supported. To edit larger files use GitHub on the web.

@@ -503,7 +503,28 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
             return GitHubFilePreview(file.name, file.path, null,
                 "Binary file; open it on GitHub.", url)
         }
-        return GitHubFilePreview(file.name, file.path, text, null, url)
+        return GitHubFilePreview(file.name, file.path, text, null, url, json.optString("sha"))
+    }
+
+    suspend fun updateExistingTextFile(
+        repo: RepositoryItem,
+        branch: String,
+        preview: GitHubFilePreview,
+        newText: String,
+        commitMessage: String,
+        token: String
+    ) {
+        val original = preview.text ?: throw IOException("No editable text file loaded.")
+        val message = validateFileCommit(original, newText, commitMessage, preview.blobSha)
+        val apiPath = contentsPath(repo, branch, preview.path).substringBefore("?ref=")
+        val bytes = newText.toByteArray(Charsets.UTF_8)
+        val content = java.util.Base64.getEncoder().encodeToString(bytes)
+        http.put(apiPath, token, JSONObject()
+            .put("message", message)
+            .put("content", content)
+            .put("sha", preview.blobSha)
+            .put("branch", branch)
+        )
     }
 
     suspend fun compareBranches(repo: RepositoryItem, branch: String, token: String?): BranchComparison {

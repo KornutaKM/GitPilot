@@ -18,7 +18,9 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -61,6 +63,10 @@ fun RepositoryFilesScreen(
     val browser = LocalUriHandler.current
     val dirKey = repositoryPathKey(repo, branch, currentDirectory)
     val selectedKey = selectedFile?.let { repositoryPathKey(repo, branch, it.path) }
+    var editMode by remember(repo.id, branch, selectedKey) { mutableStateOf(false) }
+    var editedText by remember(repo.id, branch, selectedKey) { mutableStateOf("") }
+    var commitMessage by remember(repo.id, branch, selectedKey) { mutableStateOf("") }
+    var confirmCommit by remember(repo.id, branch, selectedKey) { mutableStateOf(false) }
 
     fun goBack() {
         if (selectedFile != null) selectedFile = null
@@ -73,7 +79,7 @@ fun RepositoryFilesScreen(
     LaunchedEffect(repo.id, branch, currentDirectory, state.workspace) {
         model.loadDirectory(repo, branch, currentDirectory)
     }
-    LaunchedEffect(repo.id, branch, selectedKey) {
+    LaunchedEffect(repo.id, branch, selectedKey, state.workspace) {
         selectedFile?.let { model.loadRepositoryFile(repo, branch, it) }
     }
 
@@ -117,14 +123,57 @@ fun RepositoryFilesScreen(
                             verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text(preview.name, fontWeight = FontWeight.SemiBold)
                             if (preview.text != null) {
-                                SelectionContainer {
-                                    Text(
-                                        preview.text.take(32_000) +
-                                            if (preview.text.length > 32_000) "\n[Preview truncated]" else "",
-                                        fontFamily = FontFamily.Monospace,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        modifier = Modifier.horizontalScroll(rememberScrollState())
+                                if (editMode) {
+                                    Text("Editing one file on " + branch,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        style = MaterialTheme.typography.titleSmall)
+                                    OutlinedTextField(
+                                        value = editedText,
+                                        onValueChange = { editedText = it },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        minLines = 12,
+                                        maxLines = 22,
+                                        label = { Text("File contents") },
+                                        textStyle = MaterialTheme.typography.bodySmall.copy(
+                                            fontFamily = FontFamily.Monospace)
                                     )
+                                    OutlinedTextField(
+                                        value = commitMessage,
+                                        onValueChange = { commitMessage = it },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        label = { Text("Commit message") }
+                                    )
+                                    Text("One-file commit. GitHub will reject stale file SHAs or protected branches.",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.bodySmall)
+                                    Button(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        enabled = !state.loading && commitMessage.isNotBlank() &&
+                                            editedText != preview.text &&
+                                            editedText.toByteArray(Charsets.UTF_8).size <= 96_000,
+                                        onClick = { confirmCommit = true }
+                                    ) { Text("Review file commit") }
+                                    TextButton(onClick = { editMode = false }) { Text("Discard local edits") }
+                                } else {
+                                    SelectionContainer {
+                                        Text(
+                                            preview.text.take(32_000) +
+                                                if (preview.text.length > 32_000) "\n[Preview truncated]" else "",
+                                            fontFamily = FontFamily.Monospace,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            modifier = Modifier.horizontalScroll(rememberScrollState())
+                                        )
+                                    }
+                                    if (state.authenticatedAs != null &&
+                                        preview.text.length <= 32_000 &&
+                                        preview.blobSha.matches(Regex("[0-9a-fA-F]{40}"))) {
+                                        OutlinedButton(onClick = {
+                                            editedText = preview.text
+                                            commitMessage = "Update " + preview.name
+                                            editMode = true
+                                        }) { Text("Edit and commit file") }
+                                    }
                                 }
                             } else {
                                 Text(preview.message ?: "Preview not supported for this file.",
@@ -196,5 +245,30 @@ fun RepositoryFilesScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+    }
+    if (confirmCommit && preview?.text != null) {
+        AlertDialog(
+            onDismissRequest = { confirmCommit = false },
+            title = { Text("Commit changes to GitHub?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(repo.owner + "/" + repo.name + " · " + branch)
+                    Text(preview.path, fontWeight = FontWeight.SemiBold)
+                    Text("Message: " + commitMessage.trim())
+                    Text("This writes one file and creates a commit on the remote branch. " +
+                        "You can review the result in GitHub. No other files will change.")
+                }
+            },
+            confirmButton = {
+                Button(enabled = !state.loading,
+                    onClick = {
+                        model.commitExistingFile(repo, branch, preview, editedText, commitMessage)
+                        confirmCommit = false
+                    }) { Text("Commit on GitHub") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmCommit = false }) { Text("Cancel") }
+            }
+        )
     }
 }
