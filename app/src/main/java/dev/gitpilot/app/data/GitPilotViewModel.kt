@@ -12,6 +12,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.IOException
 
 data class PullRequestFile(val filename: String, val status: String, val patch: String)
@@ -51,15 +53,36 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
     val canSignIn: Boolean get() = clientId.isNotBlank()
     private var refreshJob: Job? = null
     private var signInJob: Job? = null
+    private val credentialMutex = Mutex()
+    private var authEpoch = 0L
 
     init { refresh() }
+
+    /** Rotate expiring device-flow credentials, never putting a client secret in Android. */
+    private suspend fun currentToken(): String? = credentialMutex.withLock {
+        val saved = session.readCredentials() ?: return@withLock null
+        val now = System.currentTimeMillis()
+        if (saved.accessUsable(now)) return@withLock saved.accessToken
+        if (!canSignIn || !saved.refreshUsable(now)) {
+            session.clear()
+            mutable.update { it.copy(authenticatedAs = null) }
+            return@withLock null
+        }
+        val epoch = authEpoch
+        val renewed = deviceAuth.renew(clientId, saved.refreshToken!!)
+        if (epoch != authEpoch) return@withLock null
+        session.save(renewed.accessToken, renewed.expiresInSeconds,
+            renewed.refreshToken, renewed.refreshExpiresInSeconds)
+        renewed.accessToken
+    }
+
 
     fun refresh() {
         refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
             mutable.update { it.copy(loading = true, error = null) }
             try {
-                val token = session.read()
+                val token = currentToken()
                 val user = if (token == null) null else service.viewerLogin(token)
                 val selected = user ?: mutable.value.publicUsername
                 val result = service.load(selected, token, preferences.getStringSet("pinned_repositories", emptySet()).orEmpty().toSet())
@@ -71,8 +94,12 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                         commitFiles = emptyMap(), branchLoading = false, detailLoading = false)
                 }
             } catch (e: Exception) {
+               if (e is kotlinx.coroutines.CancellationException) throw e
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                if (e is GitHubApiException && e.statusCode == 401) session.clear()
+                if (e is GitHubApiException && e.statusCode == 401) {
+                    session.clear()
+                    mutable.update { it.copy(authenticatedAs = null) }
+                }
                 mutable.update { it.copy(loading = false, error = cleanError(e)) }
             }
         }
@@ -101,7 +128,7 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         }
         preferences.edit().putString("public_username", username).apply()
         mutable.update { it.copy(publicUsername = username, error = null) }
-        if (session.read() == null) refresh()
+        if (mutable.value.authenticatedAs == null) refresh()
     }
 
     fun signIn() {
@@ -123,7 +150,9 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                         is PollResult.Pending -> Unit
                         is PollResult.SlowDown -> interval = answer.intervalSeconds.coerceAtLeast(5)
                         is PollResult.Authorized -> {
-                            session.save(answer.accessToken, answer.expiresInSeconds)
+                            authEpoch += 1
+                            session.save(answer.accessToken, answer.expiresInSeconds,
+                                answer.refreshToken, answer.refreshExpiresInSeconds)
                             mutable.update { it.copy(deviceCode = null, signingIn = false) }
                             refresh()
                             return@launch
@@ -132,6 +161,7 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 throw IOException("Authorization expired. Please try again.")
             } catch (e: Exception) {
+               if (e is kotlinx.coroutines.CancellationException) throw e
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 mutable.update { it.copy(signingIn = false, deviceCode = null, error = cleanError(e)) }
             }
@@ -145,6 +175,7 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
 
     fun signOut() {
         cancelSignIn()
+        authEpoch += 1
         session.clear()
         mutable.update { it.copy(authenticatedAs = null, message = "Signed out") }
         refresh()
@@ -156,9 +187,10 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             mutable.update { it.copy(branchLoading = true, error = null) }
             try {
-                val commits = service.commitsForBranch(repo, branch, session.read())
+                val commits = service.commitsForBranch(repo, branch, currentToken())
                 mutable.update { it.copy(branchCommits = it.branchCommits + (key to commits), branchLoading = false) }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 mutable.update { it.copy(branchLoading = false, error = cleanError(e)) }
             }
         }
@@ -170,9 +202,10 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             mutable.update { it.copy(detailLoading = true, error = null) }
             try {
-                val files = service.commitFiles(repo, commit, session.read())
+                val files = service.commitFiles(repo, commit, currentToken())
                 mutable.update { it.copy(commitFiles = it.commitFiles + (key to files), detailLoading = false) }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 mutable.update { it.copy(detailLoading = false, error = cleanError(e)) }
             }
         }
@@ -184,9 +217,10 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             mutable.update { it.copy(detailLoading = true, error = null) }
             try {
-                val files = service.pullFiles(pr, session.read())
+                val files = service.pullFiles(pr, currentToken())
                 mutable.update { it.copy(diffs = it.diffs + (key to files), detailLoading = false) }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 mutable.update { it.copy(detailLoading = false, error = cleanError(e)) }
             }
         }
@@ -197,9 +231,10 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             mutable.update { it.copy(loadingJobId = step.id, error = null) }
             try {
-                val text = service.fetchJobLog(run, step, session.read())
+                val text = service.fetchJobLog(run, step, currentToken())
                 mutable.update { it.copy(jobLogs = it.jobLogs + (step.id to text), loadingJobId = null) }
             } catch (e: Exception) {
+               if (e is kotlinx.coroutines.CancellationException) throw e
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 mutable.update { it.copy(loadingJobId = null, error = cleanError(e)) }
             }
@@ -211,9 +246,10 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             mutable.update { it.copy(detailLoading = true, error = null) }
             try {
-                val jobs = service.workflowJobs(run, session.read())
+                val jobs = service.workflowJobs(run, currentToken())
                 mutable.update { it.copy(jobs = it.jobs + (run.id to jobs), detailLoading = false) }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 mutable.update { it.copy(detailLoading = false, error = cleanError(e)) }
             }
         }
@@ -252,12 +288,13 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             mutable.update { it.copy(loadingDefinitionsId = repo.id, error = null) }
             try {
-                val definitions = service.listWorkflows(repo, session.read())
+                val definitions = service.listWorkflows(repo, currentToken())
                 mutable.update { it.copy(
                     definitions = it.definitions + (repo.id to definitions),
                     loadingDefinitionsId = null
                 ) }
             } catch (e: Exception) {
+               if (e is kotlinx.coroutines.CancellationException) throw e
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 mutable.update { it.copy(loadingDefinitionsId = null, error = cleanError(e)) }
             }
@@ -281,7 +318,7 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun runAuthorized(success: String, operation: suspend (String) -> Unit) {
         viewModelScope.launch {
-            val token = session.read()
+            val token = currentToken()
             if (token.isNullOrBlank()) {
                 mutable.update { it.copy(error = "Sign in with GitHub to perform this action.") }
                 return@launch
@@ -292,7 +329,11 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                 mutable.update { it.copy(message = success) }
                 refresh()
             } catch (e: Exception) {
-                if (e is GitHubApiException && e.statusCode == 401) session.clear()
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                if (e is GitHubApiException && e.statusCode == 401) {
+                    session.clear()
+                    mutable.update { it.copy(authenticatedAs = null) }
+                }
                 mutable.update { it.copy(loading = false, error = cleanError(e)) }
             }
         }

@@ -1,6 +1,7 @@
 package dev.gitpilot.app.data
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -140,7 +141,10 @@ data class GitHubDeviceCode(
 sealed interface PollResult {
     data object Pending : PollResult
     data class SlowDown(val intervalSeconds: Long) : PollResult
-    data class Authorized(val accessToken: String, val expiresInSeconds: Long?) : PollResult
+    data class Authorized(
+        val accessToken: String, val expiresInSeconds: Long?,
+        val refreshToken: String? = null, val refreshExpiresInSeconds: Long? = null
+    ) : PollResult
 }
 
 class GitHubDeviceAuth(private val http: GitHubHttp = GitHubHttp()) {
@@ -164,13 +168,38 @@ class GitHubDeviceAuth(private val http: GitHubHttp = GitHubHttp()) {
             "" -> {
                 val token = json.optString("access_token")
                 if (token.isBlank()) throw IOException("GitHub did not return an access token")
-                PollResult.Authorized(token, if (json.has("expires_in")) json.optLong("expires_in") else null)
+                PollResult.Authorized(
+                    token,
+                    if (json.has("expires_in")) json.optLong("expires_in") else null,
+                    json.optString("refresh_token").takeIf { it.isNotBlank() },
+                    if (json.has("refresh_token_expires_in")) json.optLong("refresh_token_expires_in") else null
+                )
             }
             "authorization_pending" -> PollResult.Pending
             "slow_down" -> PollResult.SlowDown(json.optLong("interval", code.intervalSeconds + 5))
             else -> throw IOException(json.optString("error_description", json.optString("error")))
         }
     }
+    suspend fun renew(clientId: String, refreshToken: String): PollResult.Authorized {
+        val json = http.oauth("/login/oauth/access_token", mapOf(
+            "client_id" to clientId,
+            "grant_type" to "refresh_token",
+            "refresh_token" to refreshToken
+        ))
+        val error = json.optString("error")
+        if (error.isNotBlank()) {
+            throw IOException(json.optString("error_description", error))
+        }
+        val token = json.optString("access_token")
+        if (token.isBlank()) throw IOException("GitHub did not provide renewed access credentials")
+        return PollResult.Authorized(
+            token,
+            if (json.has("expires_in")) json.optLong("expires_in") else null,
+            json.optString("refresh_token").takeIf { it.isNotBlank() },
+            if (json.has("refresh_token_expires_in")) json.optLong("refresh_token_expires_in") else null
+        )
+    }
+
 }
 
 data class WorkflowDefinition(val id: Long, val name: String, val active: Boolean)
@@ -207,6 +236,7 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
                     BranchItem(item.getString("name"), item.getString("name") == repo.branch, -1, -1)
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 warnings += repo.name + " branches: " + e.message.orEmpty()
             }
             try {
@@ -221,6 +251,7 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
                         author, details.optJSONObject("author")?.optString("date").orEmpty().take(10), -1, 0, 0, sha)
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 warnings += repo.name + " commits: " + e.message.orEmpty()
             }
             try {
@@ -241,6 +272,7 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
                         reviewForViewer, repo.owner, head.optString("sha"), item.optString("html_url"))
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 warnings += repo.name + " PRs: " + e.message.orEmpty()
             }
             try {
@@ -258,6 +290,7 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
                         repo.owner, item.optString("html_url"))
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 warnings += repo.name + " Actions: " + e.message.orEmpty()
             }
         }
@@ -286,6 +319,7 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
                 warnings += "Checks: " + e.message.orEmpty()
                 if (e.statusCode == 403 || e.statusCode == 401) break
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 warnings += "Checks: " + e.message.orEmpty()
             }
         }

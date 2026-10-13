@@ -33,7 +33,7 @@ GitPilot uses GitHub App OAuth Device Flow. This protocol uses a public client I
 5. For APKs made by GitHub Actions, set repository Actions variable GITPILOT_GITHUB_CLIENT_ID.
 6. On the phone, open Account -> Connect GitHub. Follow the browser device code prompt.
 
-Access tokens are encrypted in local storage via Android Keystore AES-GCM; Android backups are disabled. No client secret or token is embedded in the APK or tracked in the repository. The user must authorize again after token expiry.
+Access and refresh tokens are encrypted together using Android Keystore AES-GCM; Android backups are disabled. For expiring GitHub App user tokens obtained via Device Flow, GitPilot silently rotates credentials before they expire. Expired refresh credentials or revoked authorizations require signing in again. No client secret or token is embedded in the APK or tracked in the repository.
 
 In public mode, remote mutations are disabled. When signed in, every review, merge and rerun requires confirmation and GitHub enforces the repository permissions and branch protection rules. Failed API calls are shown, not simulated.
 
