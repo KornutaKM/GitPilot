@@ -2,6 +2,11 @@ package dev.gitpilot.app.data
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -10,7 +15,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
-class GitHubApiException(val statusCode: Int, message: String) : IOException(message)
+class GitHubApiException(val statusCode: Int, message: String, val rateLimited: Boolean = false) : IOException(message)
 
 private fun enc(part: String): String = URLEncoder.encode(part, "UTF-8").replace("+", "%20")
 
@@ -109,6 +114,7 @@ class GitHubHttp {
         val conn = URL(endpoint).openConnection() as HttpURLConnection
         try {
             conn.requestMethod = method
+            conn.instanceFollowRedirects = false
             conn.connectTimeout = 15000
             conn.readTimeout = 20000
             conn.setRequestProperty("Accept", if (form) "application/json" else "application/vnd.github+json")
@@ -125,7 +131,11 @@ class GitHubHttp {
                 ?.bufferedReader()?.use { it.readText() }.orEmpty()
             if (code !in 200..299) {
                 val reason = runCatching { JSONObject(result).optString("message") }.getOrNull().orEmpty()
-                throw GitHubApiException(code, "GitHub HTTP " + code + if (reason.isBlank()) "" else ": " + reason.take(160))
+                val limited = code == 429 || (code == 403 &&
+                    conn.getHeaderField("X-RateLimit-Remaining") == "0")
+                val explanation = if (limited) "GitHub API rate limit reached. Retry after the limit resets."
+                    else "GitHub HTTP " + code + if (reason.isBlank()) "" else ": " + reason.take(160)
+                throw GitHubApiException(code, explanation, limited)
             }
             result
         } finally {
@@ -227,7 +237,12 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
         val warnings = mutableListOf<String>()
         // Limit requests in anonymous mode (60 requests/hour shared by IP).
         val monitored = all.take(if (signedIn) 8 else 4)
-        for (repo in monitored) {
+        // At most three repositories are fetched simultaneously to keep the mobile
+        // dashboard responsive without overwhelming GitHub or the user's connection.
+        coroutineScope {
+            val gate = Semaphore(3)
+            monitored.map { repo -> async {
+                gate.withPermit {
             val root = "/repos/" + enc(repo.owner) + "/" + enc(repo.name)
             try {
                 val response = JSONArray(http.get(root + "/branches?per_page=30", token))
@@ -237,6 +252,7 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
+                if (e is GitHubApiException && (e.rateLimited || e.statusCode == 401)) throw e
                 warnings += repo.name + " branches: " + e.message.orEmpty()
             }
             try {
@@ -252,6 +268,7 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
+                if (e is GitHubApiException && (e.rateLimited || e.statusCode == 401)) throw e
                 warnings += repo.name + " commits: " + e.message.orEmpty()
             }
             try {
@@ -273,6 +290,7 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
+                if (e is GitHubApiException && (e.rateLimited || e.statusCode == 401)) throw e
                 warnings += repo.name + " PRs: " + e.message.orEmpty()
             }
             try {
@@ -291,9 +309,16 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
+                if (e is GitHubApiException && (e.rateLimited || e.statusCode == 401)) throw e
                 warnings += repo.name + " Actions: " + e.message.orEmpty()
             }
+                }
+            } }.awaitAll()
         }
+        // Preserve selected-repository priority despite out-of-order network responses.
+        val order = monitored.withIndex().associate { it.value.owner.lowercase() + "/" +
+            it.value.name.lowercase() to it.index }
+        prs.sortWith(compareBy({ order[it.owner.lowercase() + "/" + it.repo.lowercase()] ?: Int.MAX_VALUE }, { it.number }))
         // Limit per-PR checks requests; lack of access is not equivalent to passed CI.
         val maxChecks = if (signedIn) 12 else 5
         for (index in 0 until minOf(prs.size, maxChecks)) {
@@ -317,9 +342,11 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
                 prs[index] = pr.copy(check = status)
             } catch (e: GitHubApiException) {
                 warnings += "Checks: " + e.message.orEmpty()
-                if (e.statusCode == 403 || e.statusCode == 401) break
+                if (e.rateLimited || e.statusCode == 401) throw e
+                if (e.statusCode == 403) break
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
+                if (e is GitHubApiException && (e.rateLimited || e.statusCode == 401)) throw e
                 warnings += "Checks: " + e.message.orEmpty()
             }
         }

@@ -55,3 +55,7 @@ In public mode, remote mutations are disabled. When signed in, every review, mer
 ## License
 
 Not selected.
+
+## Network reliability
+
+Workspace requests for recent repositories are performed with a concurrency limit of three. GitHub API rate-limit responses stop the refresh early instead of repeatedly retrying forbidden requests; authentication failures and coroutine cancellation propagate, while ordinary per-repository permission errors appear in Account warnings. Refresh remains manual, with a bounded number of monitored repositories and PR checks.
