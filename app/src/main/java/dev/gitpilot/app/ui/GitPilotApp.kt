@@ -405,12 +405,18 @@ private fun RepositoryDetail(
     var selectedCommit by remember(repo.id, selectedBranch) { mutableStateOf<CommitItem?>(null) }
     var createBranchFrom by remember(repo.id) { mutableStateOf<CommitItem?>(null) }
     var newBranchName by remember(repo.id) { mutableStateOf("") }
+    var createPrDialog by remember(repo.id) { mutableStateOf(false) }
+    var prTitle by remember(repo.id) { mutableStateOf("") }
+    var prDescription by remember(repo.id) { mutableStateOf("") }
     val branchKey = GitPilotViewModel.branchKey(repo, selectedBranch)
     val history = if (selectedBranch == repo.branch) ws.commits[repo.id]
         else state.branchCommits[branchKey]
 
     LaunchedEffect(repo.id, selectedBranch) {
-        if (selectedBranch != repo.branch) model.loadBranchCommits(repo, selectedBranch)
+        if (selectedBranch != repo.branch) {
+            model.loadBranchCommits(repo, selectedBranch)
+            model.loadBranchComparison(repo, selectedBranch)
+        }
     }
 
     LazyColumn(
@@ -432,6 +438,53 @@ private fun RepositoryDetail(
         item { Text("Branches", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
         items(ws.branches[repo.id].orEmpty(), key = { it.name }) { branch ->
             BranchRow(branch, selected = selectedBranch == branch.name) { selectedBranch = branch.name }
+        }
+        if (selectedBranch != repo.branch) {
+            item {
+                val comparison = state.comparisons[branchKey]
+                Panel {
+                    Text("Compare with " + repo.branch,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold)
+                    if (comparison == null) {
+                        Muted(if (state.loadingComparisonKey == branchKey) "Comparing branches on GitHub…"
+                            else "Comparison unavailable; try another branch or refresh.")
+                    } else {
+                        Muted(comparison.aheadBy.toString() + " commits ahead · " +
+                            comparison.behindBy + " commits behind")
+                        Muted("Status: " + comparison.status)
+                        if (comparison.changedFiles.isEmpty()) {
+                            Muted("No changed files reported by GitHub.")
+                        } else {
+                            Text("Changed files (" + comparison.changedFiles.size + " shown)",
+                                fontWeight = FontWeight.Medium)
+                            comparison.changedFiles.take(10).forEach { file ->
+                                Text(file.filename,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary)
+                                Text(file.patch.take(3000),
+                                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 12.sp,
+                                    lineHeight = 18.sp)
+                            }
+                            if (comparison.changedFiles.size > 10) Muted("Showing first 10 changed files.")
+                        }
+                        if (state.authenticatedAs != null) {
+                            Button(
+                                enabled = comparison.canOpenPullRequest && !state.loading,
+                                onClick = {
+                                    prTitle = ""
+                                    prDescription = ""
+                                    createPrDialog = true
+                                }
+                            ) { Text("Create pull request") }
+                        } else {
+                            Muted("Sign in to create a pull request.")
+                        }
+                    }
+                }
+            }
         }
         item {
             Text("Commits · " + selectedBranch, style = MaterialTheme.typography.titleMedium,
@@ -509,6 +562,46 @@ private fun RepositoryDetail(
             },
             dismissButton = {
                 TextButton(onClick = { createBranchFrom = null }) { Text("Cancel") }
+            }
+        )
+    }
+    if (createPrDialog) {
+        AlertDialog(
+            onDismissRequest = { createPrDialog = false },
+            title = { Text("Create a pull request") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Muted(repo.owner + "/" + repo.name + " · " + selectedBranch + " → " + repo.branch)
+                    OutlinedTextField(
+                        value = prTitle,
+                        onValueChange = { prTitle = it },
+                        label = { Text("Title") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = prDescription,
+                        onValueChange = { prDescription = it },
+                        label = { Text("Description (optional)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 6
+                    )
+                    Muted("This creates a real pull request on GitHub. No code is merged.")
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = prTitle.isNotBlank() && prTitle.trim().length <= 200 &&
+                        prDescription.length <= 10_000 && !state.loading,
+                    onClick = {
+                        model.createPullRequest(repo, selectedBranch, prTitle, prDescription)
+                        createPrDialog = false
+                    }
+                ) { Text("Create PR on GitHub") }
+            },
+            dismissButton = {
+                TextButton(onClick = { createPrDialog = false }) { Text("Cancel") }
             }
         )
     }

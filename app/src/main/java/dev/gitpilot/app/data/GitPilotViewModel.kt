@@ -35,6 +35,8 @@ data class GitPilotState(
     val jobLogs: Map<Long, String> = emptyMap(),
     val loadingJobId: Long? = null,
     val branchCommits: Map<String, List<CommitItem>> = emptyMap(),
+    val comparisons: Map<String, BranchComparison> = emptyMap(),
+    val loadingComparisonKey: String? = null,
     val commitFiles: Map<String, List<PullRequestFile>> = emptyMap(),
     val branchLoading: Boolean = false,
     val detailLoading: Boolean = false,
@@ -72,7 +74,8 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                 workspace = Workspace(emptyList(), emptyList(), emptyList(), emptyMap(), emptyMap()),
                 diffs = emptyMap(), discussion = emptyMap(), loadingDiscussionKey = null,
                 jobs = emptyMap(), jobLogs = emptyMap(),
-                branchCommits = emptyMap(), commitFiles = emptyMap(),
+                branchCommits = emptyMap(), comparisons = emptyMap(), loadingComparisonKey = null,
+                commitFiles = emptyMap(),
                 definitions = emptyMap(), loading = false, detailLoading = false,
                 loadingJobId = null, loadingDefinitionsId = null, branchLoading = false,
                 warnings = emptyList()
@@ -111,7 +114,7 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                         authenticatedAs = user, warnings = result.warnings,
                         diffs = emptyMap(), discussion = emptyMap(), loadingDiscussionKey = null,
                 jobs = emptyMap(), jobLogs = emptyMap(), loadingJobId = null,
-                        branchCommits = emptyMap(),
+                        branchCommits = emptyMap(), comparisons = emptyMap(), loadingComparisonKey = null,
                         commitFiles = emptyMap(), branchLoading = false, detailLoading = false)
                 }
             } catch (e: Exception) {
@@ -196,6 +199,30 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         invalidateSession()
         mutable.update { it.copy(message = "Signed out") }
         refresh()
+    }
+
+    fun loadBranchComparison(repo: RepositoryItem, branch: String) {
+        if (branch == repo.branch) return
+        val key = branchKey(repo, branch)
+        if (mutable.value.comparisons.containsKey(key) ||
+            mutable.value.loadingComparisonKey == key) return
+        val epoch = authEpoch
+        viewModelScope.launch {
+            if (epoch != authEpoch) return@launch
+            mutable.update { it.copy(loadingComparisonKey = key, error = null) }
+            try {
+                val comparison = service.compareBranches(repo, branch, currentToken())
+                if (epoch == authEpoch) mutable.update {
+                    it.copy(comparisons = it.comparisons + (key to comparison),
+                        loadingComparisonKey = null)
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                if (epoch == authEpoch) mutable.update {
+                    it.copy(loadingComparisonKey = null, error = cleanError(e))
+                }
+            }
+        }
     }
 
     fun loadBranchCommits(repo: RepositoryItem, branch: String) {
@@ -301,6 +328,23 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 if (epoch == authEpoch) mutable.update { it.copy(detailLoading = false, error = cleanError(e)) }
             }
+        }
+    }
+
+    fun createPullRequest(repo: RepositoryItem, sourceBranch: String, title: String, body: String) {
+        val compared = mutable.value.comparisons[branchKey(repo, sourceBranch)]
+        if (compared == null || !compared.canOpenPullRequest) {
+            mutable.update { it.copy(error = "Compare a branch with new commits before creating a PR.") }
+            return
+        }
+        val validated = try {
+            validatedPullRequestDraft(title, body)
+        } catch (e: IllegalArgumentException) {
+            mutable.update { it.copy(error = e.message ?: "Invalid pull request.") }
+            return
+        }
+        runAuthorized("Pull request created on GitHub") { token ->
+            service.createPullRequest(repo, sourceBranch, validated.first, validated.second, token)
         }
     }
 

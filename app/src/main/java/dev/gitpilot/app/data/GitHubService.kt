@@ -433,6 +433,40 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
         }
     }
 
+    suspend fun compareBranches(repo: RepositoryItem, branch: String, token: String?): BranchComparison {
+        require(validGitRefName(branch)) { "Invalid source branch." }
+        val path = "/repos/" + enc(repo.owner) + "/" + enc(repo.name) +
+            "/compare/" + enc(repo.branch) + "..." + enc(branch) + "?per_page=50"
+        val json = JSONObject(http.get(path, token))
+        val files = json.optJSONArray("files") ?: JSONArray()
+        val patches = (0 until files.length()).map { index ->
+            val item = files.getJSONObject(index)
+            PullRequestFile(item.optString("filename"), item.optString("status"),
+                item.optString("patch", "Diff unavailable for this file").take(12_000))
+        }
+        return BranchComparison(
+            repo.branch, branch, json.optString("status"),
+            json.optInt("ahead_by"), json.optInt("behind_by"),
+            patches, json.optString("html_url")
+        )
+    }
+
+    suspend fun createPullRequest(
+        repo: RepositoryItem, branch: String, title: String, body: String, token: String
+    ) {
+        require(validGitRefName(branch) && branch != repo.branch) {
+            "Choose a non-default source branch."
+        }
+        val validated = validatedPullRequestDraft(title, body)
+        val path = "/repos/" + enc(repo.owner) + "/" + enc(repo.name) + "/pulls"
+        http.post(path, token, JSONObject()
+            .put("title", validated.first)
+            .put("body", validated.second)
+            .put("base", repo.branch)
+            .put("head", branch)
+        )
+    }
+
     suspend fun commitsForBranch(repo: RepositoryItem, branch: String, token: String?): List<CommitItem> {
         val path = "/repos/" + enc(repo.owner) + "/" + enc(repo.name) +
             "/commits?sha=" + enc(branch) + "&per_page=12"

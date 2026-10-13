@@ -2,12 +2,12 @@
 
 Native GitHub control center built with Kotlin, Jetpack Compose and Material 3.
 
-## Version 0.5.0-alpha
+## Version 0.6.0-alpha
 
 Live public repository browsing now works without a GitHub login. GitHub App Device Flow sign-in and remote operations (reviews, squash merge and retry failed workflow jobs) are implemented; signed-in features require a GitHub App Client ID and installation permissions.
 
 - Overview: pinned and recent repositories, pull requests and GitHub Actions from live GitHub REST endpoints. Pinned projects remain accessible even after dropping out of GitHub recent activity.
-- Repositories: default-branch and selected-branch history, actual commit patches and confirmed creation of a remote branch from a chosen commit.
+- Repositories: default-branch and selected-branch history, actual commit patches, branch comparison against the default branch, remote branch creation and pull-request creation from a selected branch.
 - PRs: real changed-file patches, GitHub conversation and inline review history, public PR comments with a confirmation dialog, review actions, and squash merge.
 - Actions: real workflow runs and job logs, explicit cancellation of running runs, rerun failed jobs, and manually dispatch active workflows from a chosen branch or tag, with up to ten key=value inputs.
 - Account: choose public GitHub username, connect/disconnect GitHub App user authorization.
@@ -77,3 +77,7 @@ For Actions → Run a workflow, select a repository, an active workflow and bran
 Open a PR to load its GitHub issue conversation and inline review comments together in chronological order. The app currently loads at most 50 entries from each endpoint; older/longer discussions may require opening the PR on GitHub. Signed-in users can post a conversation comment after seeing a confirmation dialog. GitHub checks permission and exposes comments to people with access to the PR. Input is trimmed, empty comments are rejected and submissions are bounded to 10,000 characters. Comments do not directly modify files.
 
 On a running/queued Actions run, signed-in users can request cancellation after confirmation; the operation is unavailable once the run is completed. GitHub determines whether cancellation is still possible, including race conditions with completion. These actions never simulate remote success.
+
+## Branch comparison and PR creation
+
+Choose a non-default branch on a repository screen to fetch GitHub's base...head comparison against its default branch. The comparison reports ahead/behind counts and a bounded preview of the changed files. A signed-in user can create a pull request when the comparison contains at least one head-only commit, after entering a validated title and optional description and confirming the remote operation. GitHub remains authoritative for permissions and existing PRs; API errors are displayed. This alpha only compares against the default branch, not arbitrary branch pairs.
