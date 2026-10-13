@@ -12,8 +12,8 @@ android {
         applicationId = "dev.gitpilot.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.6.0-alpha"
+        versionCode = 6
+        versionName = "0.7.0-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         val githubClientId = providers.gradleProperty("gitpilot.githubClientId").orElse("").get()
         require(githubClientId.matches(Regex("[A-Za-z0-9_-]*"))) { "Invalid GitHub App client ID" }

@@ -433,6 +433,79 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
         }
     }
 
+    private fun contentsPath(repo: RepositoryItem, branch: String, path: String): String {
+        require(validGitRefName(branch)) { "Invalid branch reference." }
+        val clean = validateRepositoryPath(path)
+        val encodedPath = if (clean.isBlank()) "" else
+            "/" + clean.split("/").joinToString("/") { enc(it) }
+        return "/repos/" + enc(repo.owner) + "/" + enc(repo.name) +
+            "/contents" + encodedPath + "?ref=" + enc(branch)
+    }
+
+    suspend fun listDirectory(
+        repo: RepositoryItem, branch: String, path: String, token: String?
+    ): List<GitHubFileEntry> {
+        val json = JSONArray(http.get(contentsPath(repo, branch, path), token))
+        val entries = (0 until json.length()).map { index ->
+            val item = json.getJSONObject(index)
+            val type = when (item.optString("type")) {
+                "dir" -> GitHubEntryType.DIRECTORY
+                "file" -> GitHubEntryType.FILE
+                "submodule" -> GitHubEntryType.SUBMODULE
+                else -> GitHubEntryType.OTHER
+            }
+            GitHubFileEntry(
+                name = item.optString("name"),
+                path = item.optString("path"),
+                type = type,
+                sizeBytes = item.optLong("size"),
+                htmlUrl = item.optString("html_url")
+            )
+        }
+        return sortDirectoryEntries(entries)
+    }
+
+    suspend fun readFile(
+        repo: RepositoryItem, branch: String, file: GitHubFileEntry, token: String?
+    ): GitHubFilePreview {
+        require(file.type == GitHubEntryType.FILE) { "Only regular files can be previewed." }
+        val json = JSONObject(http.get(contentsPath(repo, branch, file.path), token))
+        val url = json.optString("html_url").takeIf { it.startsWith("https://github.com/") }
+            ?: file.htmlUrl
+        val size = json.optLong("size", file.sizeBytes)
+        if (size > 96_000L) {
+            return GitHubFilePreview(file.name, file.path, null,
+                "File is larger than the 96 KB preview limit.", url)
+        }
+        if (json.optString("encoding") != "base64") {
+            return GitHubFilePreview(file.name, file.path, null,
+                "GitHub did not return inline Base64 file contents.", url)
+        }
+        val raw = json.optString("content").filterNot { it.isWhitespace() }
+        val bytes = try {
+            java.util.Base64.getDecoder().decode(raw)
+        } catch (e: IllegalArgumentException) {
+            return GitHubFilePreview(file.name, file.path, null, "Unable to decode this file.", url)
+        }
+        if (bytes.size > 96_000) {
+            return GitHubFilePreview(file.name, file.path, null, "File exceeds the preview limit.", url)
+        }
+        val decoder = Charsets.UTF_8.newDecoder()
+            .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+            .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+        val text = try {
+            decoder.decode(java.nio.ByteBuffer.wrap(bytes)).toString()
+        } catch (e: java.nio.charset.CharacterCodingException) {
+            return GitHubFilePreview(file.name, file.path, null,
+                "Binary or non-UTF-8 file; open it on GitHub.", url)
+        }
+        if (text.indexOf('\u0000') >= 0) {
+            return GitHubFilePreview(file.name, file.path, null,
+                "Binary file; open it on GitHub.", url)
+        }
+        return GitHubFilePreview(file.name, file.path, text, null, url)
+    }
+
     suspend fun compareBranches(repo: RepositoryItem, branch: String, token: String?): BranchComparison {
         require(validGitRefName(branch)) { "Invalid source branch." }
         val path = "/repos/" + enc(repo.owner) + "/" + enc(repo.name) +

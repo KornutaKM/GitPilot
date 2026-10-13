@@ -405,6 +405,7 @@ private fun RepositoryDetail(
     var selectedCommit by remember(repo.id, selectedBranch) { mutableStateOf<CommitItem?>(null) }
     var createBranchFrom by remember(repo.id) { mutableStateOf<CommitItem?>(null) }
     var newBranchName by remember(repo.id) { mutableStateOf("") }
+    var fileBrowserOpen by remember(repo.id) { mutableStateOf(false) }
     var createPrDialog by remember(repo.id) { mutableStateOf(false) }
     var prTitle by remember(repo.id) { mutableStateOf("") }
     var prDescription by remember(repo.id) { mutableStateOf("") }
@@ -419,6 +420,12 @@ private fun RepositoryDetail(
         }
     }
 
+    if (fileBrowserOpen) {
+        RepositoryFilesScreen(repo = repo, branch = selectedBranch, model = model,
+            onClose = { fileBrowserOpen = false })
+        return
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
@@ -430,6 +437,9 @@ private fun RepositoryDetail(
                 Muted("DEFAULT BRANCH")
                 Text(repo.branch, fontWeight = FontWeight.SemiBold)
                 Muted(repo.owner + " · " + repo.language)
+                Button(onClick = { fileBrowserOpen = true }) {
+                    Text("Browse files · " + selectedBranch)
+                }
                 OutlinedButton(onClick = { model.togglePin(repo) }) {
                     Text(if (repo.starred) "Unpin repository" else "Pin repository")
                 }

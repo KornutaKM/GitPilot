@@ -35,6 +35,10 @@ data class GitPilotState(
     val jobLogs: Map<Long, String> = emptyMap(),
     val loadingJobId: Long? = null,
     val branchCommits: Map<String, List<CommitItem>> = emptyMap(),
+    val directoryContents: Map<String, List<GitHubFileEntry>> = emptyMap(),
+    val filePreviews: Map<String, GitHubFilePreview> = emptyMap(),
+    val loadingDirectoryKey: String? = null,
+    val loadingFileKey: String? = null,
     val comparisons: Map<String, BranchComparison> = emptyMap(),
     val loadingComparisonKey: String? = null,
     val commitFiles: Map<String, List<PullRequestFile>> = emptyMap(),
@@ -75,6 +79,8 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                 diffs = emptyMap(), discussion = emptyMap(), loadingDiscussionKey = null,
                 jobs = emptyMap(), jobLogs = emptyMap(),
                 branchCommits = emptyMap(), comparisons = emptyMap(), loadingComparisonKey = null,
+                directoryContents = emptyMap(), filePreviews = emptyMap(),
+                loadingDirectoryKey = null, loadingFileKey = null,
                 commitFiles = emptyMap(),
                 definitions = emptyMap(), loading = false, detailLoading = false,
                 loadingJobId = null, loadingDefinitionsId = null, branchLoading = false,
@@ -115,6 +121,8 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                         diffs = emptyMap(), discussion = emptyMap(), loadingDiscussionKey = null,
                 jobs = emptyMap(), jobLogs = emptyMap(), loadingJobId = null,
                         branchCommits = emptyMap(), comparisons = emptyMap(), loadingComparisonKey = null,
+                directoryContents = emptyMap(), filePreviews = emptyMap(),
+                loadingDirectoryKey = null, loadingFileKey = null,
                         commitFiles = emptyMap(), branchLoading = false, detailLoading = false)
                 }
             } catch (e: Exception) {
@@ -199,6 +207,52 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         invalidateSession()
         mutable.update { it.copy(message = "Signed out") }
         refresh()
+    }
+
+    fun loadDirectory(repo: RepositoryItem, branch: String, path: String) {
+        val key = repositoryPathKey(repo, branch, path)
+        if (mutable.value.directoryContents.containsKey(key) ||
+            mutable.value.loadingDirectoryKey == key) return
+        val epoch = authEpoch
+        viewModelScope.launch {
+            if (epoch != authEpoch) return@launch
+            mutable.update { it.copy(loadingDirectoryKey = key, error = null) }
+            try {
+                val contents = service.listDirectory(repo, branch, path, currentToken())
+                if (epoch == authEpoch) mutable.update {
+                    it.copy(directoryContents = it.directoryContents + (key to contents),
+                        loadingDirectoryKey = null)
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                if (epoch == authEpoch) mutable.update {
+                    it.copy(loadingDirectoryKey = null, error = cleanError(e))
+                }
+            }
+        }
+    }
+
+    fun loadRepositoryFile(repo: RepositoryItem, branch: String, file: GitHubFileEntry) {
+        val key = repositoryPathKey(repo, branch, file.path)
+        if (mutable.value.filePreviews.containsKey(key) ||
+            mutable.value.loadingFileKey == key) return
+        val epoch = authEpoch
+        viewModelScope.launch {
+            if (epoch != authEpoch) return@launch
+            mutable.update { it.copy(loadingFileKey = key, error = null) }
+            try {
+                val preview = service.readFile(repo, branch, file, currentToken())
+                if (epoch == authEpoch) mutable.update {
+                    it.copy(filePreviews = it.filePreviews + (key to preview),
+                        loadingFileKey = null)
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                if (epoch == authEpoch) mutable.update {
+                    it.copy(loadingFileKey = null, error = cleanError(e))
+                }
+            }
+        }
     }
 
     fun loadBranchComparison(repo: RepositoryItem, branch: String) {
