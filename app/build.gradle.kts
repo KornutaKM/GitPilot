@@ -13,8 +13,11 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1.0-alpha"
+        versionName = "0.2.0-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        val githubClientId = providers.gradleProperty("gitpilot.githubClientId").orElse("").get()
+        require(githubClientId.matches(Regex("[A-Za-z0-9_-]*"))) { "Invalid GitHub App client ID" }
+        buildConfigField("String", "GITHUB_CLIENT_ID", "\"$githubClientId\"")
     }
 
     compileOptions {
@@ -28,7 +31,7 @@ android {
         }
     }
 
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
 }
 
 dependencies {

@@ -45,8 +45,14 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,7 +80,7 @@ enum class MainTab(val label: String) { HOME("Home"), REPOS("Repos"), PRS("PRs")
 
 private sealed interface Details {
     data class Repository(val id: Int) : Details
-    data class PullRequest(val number: Int) : Details
+    data class PullRequest(val key: String) : Details
     data class Workflow(val id: Long) : Details
 }
 
@@ -82,11 +88,25 @@ private sealed interface Details {
 fun GitPilotApp(model: GitPilotViewModel = viewModel()) {
     var tab by rememberSaveable { mutableStateOf(MainTab.HOME) }
     var detail by remember { mutableStateOf<Details?>(null) }
-    val workspace = model.workspace
-    BackHandler(enabled = detail != null) { detail = null }
+    var connectionScreen by rememberSaveable { mutableStateOf(false) }
+    val state by model.state.collectAsState()
+    val workspace = state.workspace
+    val snackbars = remember { SnackbarHostState() }
+    LaunchedEffect(state.error, state.message) {
+        val notice = state.error ?: state.message
+        if (notice != null) {
+            snackbars.showSnackbar(notice)
+            model.dismissError()
+            model.consumeMessage()
+        }
+    }
+    BackHandler(enabled = detail != null || connectionScreen) {
+        if (detail != null) detail = null else connectionScreen = false
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbars) },
         topBar = {
             Column {
                 Row(
@@ -101,13 +121,19 @@ fun GitPilotApp(model: GitPilotViewModel = viewModel()) {
                     Column(Modifier.weight(1f)) {
                         Text("GitPilot", fontSize = 24.sp, fontWeight = FontWeight.Bold)
                         Text(
-                            if (detail == null) "Your GitHub. Under control." else "Workspace / Details",
+                            if (detail != null) "Workspace / Details" else if (state.authenticatedAs != null) "Connected: @" + state.authenticatedAs else "Public: @" + state.publicUsername,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.labelSmall
                         )
                     }
-                    DemoTag()
+                    IconButton(onClick = { model.refresh() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh live data")
+                    }
+                    TextButton(onClick = { detail = null; connectionScreen = true }) {
+                        Text("Account")
+                    }
                 }
+                if (state.loading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.30f))
             }
         },
@@ -116,7 +142,7 @@ fun GitPilotApp(model: GitPilotViewModel = viewModel()) {
                 MainTab.entries.forEach { item ->
                     NavigationBarItem(
                         selected = tab == item,
-                        onClick = { tab = item; detail = null },
+                        onClick = { tab = item; detail = null; connectionScreen = false },
                         label = { Text(item.label) },
                         icon = {
                             Icon(
@@ -134,15 +160,33 @@ fun GitPilotApp(model: GitPilotViewModel = viewModel()) {
         }
     ) { inset ->
         Box(Modifier.fillMaxSize().padding(inset)) {
-            when (val active = detail) {
+            if (connectionScreen) {
+                ConnectionScreen(
+                    state = state, signInAvailable = model.canSignIn,
+                    onUsernameChange = model::setPublicUsername,
+                    onSignIn = model::signIn, onCancel = model::cancelSignIn,
+                    onSignOut = model::signOut, onRefresh = model::refresh
+                )
+            } else when (val active = detail) {
                 is Details.Repository -> workspace.repositories.find { it.id == active.id }?.let { repo ->
                     RepositoryDetail(repo, workspace, onBack = { detail = null })
                 }
-                is Details.PullRequest -> workspace.pullRequests.find { it.number == active.number }?.let { pr ->
-                    PullRequestDetail(pr)
+                is Details.PullRequest -> workspace.pullRequests.find { GitPilotViewModel.diffKey(it) == active.key }?.let { pr ->
+                    LaunchedEffect(active.key) { model.loadPullFiles(pr) }
+                    LivePullRequestDetail(
+                        pr, state.diffs[active.key], state.detailLoading,
+                        authenticated = state.authenticatedAs != null,
+                        onReview = { event, message -> model.review(pr, event, message) },
+                        onMerge = { model.merge(pr) }
+                    )
                 }
                 is Details.Workflow -> workspace.workflows.find { it.id == active.id }?.let { run ->
-                    WorkflowDetail(run)
+                    LaunchedEffect(active.id) { model.loadWorkflowJobs(run) }
+                    LiveWorkflowDetail(
+                        run, state.jobs[run.id], state.detailLoading,
+                        authenticated = state.authenticatedAs != null,
+                        onRerunFailed = { model.rerunFailed(run) }
+                    )
                 }
                 null -> when (tab) {
                     MainTab.HOME -> Dashboard(workspace,
@@ -200,12 +244,14 @@ private fun Status(status: CheckStatus) {
         CheckStatus.FAILED -> Color(0xFFEE7180)
         CheckStatus.RUNNING -> Color(0xFF8CA7FF)
         CheckStatus.PENDING -> Color(0xFFE6BC6C)
+        CheckStatus.UNKNOWN -> Color(0xFF8B919E)
     }
     val label = when (status) {
         CheckStatus.SUCCESS -> "Passed"
         CheckStatus.FAILED -> "Failed"
         CheckStatus.RUNNING -> "Running"
         CheckStatus.PENDING -> "Pending"
+        CheckStatus.UNKNOWN -> "Unknown"
     }
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -219,6 +265,7 @@ private fun Status(status: CheckStatus) {
                 CheckStatus.FAILED -> Icons.Default.Error
                 CheckStatus.RUNNING -> Icons.Default.Refresh
                 CheckStatus.PENDING -> Icons.Default.Schedule
+                CheckStatus.UNKNOWN -> Icons.Default.Info
             }, contentDescription = null, tint = color, modifier = Modifier.size(14.dp)
         )
         Text(label, color = color, style = MaterialTheme.typography.labelSmall)
@@ -243,7 +290,7 @@ private fun Stat(number: String, label: String, modifier: Modifier = Modifier) {
 private fun Dashboard(
     ws: Workspace,
     onRepo: (Int) -> Unit,
-    onPr: (Int) -> Unit,
+    onPr: (String) -> Unit,
     onWorkflow: (Long) -> Unit
 ) {
     val failed = ws.workflows.filter { it.check == CheckStatus.FAILED }
@@ -263,10 +310,11 @@ private fun Dashboard(
         }
         item { Text("Needs attention", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
         items(failed) { run -> WorkflowRow(run, onClick = { onWorkflow(run.id) }) }
-        items(reviews) { pr -> PullRequestRow(pr, onClick = { onPr(pr.number) }) }
-        item { Text("Pinned projects", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
-        items(ws.repositories.filter { it.starred }) { repo -> RepositoryRow(repo, onClick = { onRepo(repo.id) }) }
-        item { Muted("Preview data only. Connect GitHub in a future milestone to see live status.") }
+        items(reviews) { pr -> PullRequestRow(pr, onClick = { onPr(GitPilotViewModel.diffKey(pr)) }) }
+        item { Text("Recent repositories", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
+        items(ws.repositories.take(6)) { repo -> RepositoryRow(repo, onClick = { onRepo(repo.id) }) }
+        if (ws.repositories.isEmpty()) item { Muted("No repositories loaded. Open Account to browse a public GitHub profile.") }
+        item { Muted("Live GitHub data. Use the refresh button in the top bar to fetch new results.") }
     }
 }
 
@@ -338,12 +386,12 @@ private fun RepositoryDetail(repo: RepositoryItem, ws: Workspace, onBack: () -> 
                 Muted("${commit.sha} · ${commit.author} · ${commit.time}")
                 if (selectedCommit?.sha == commit.sha) {
                     HorizontalDivider()
-                    Muted("${commit.filesChanged} changed files · +${commit.additions} / −${commit.deletions}")
-                    Muted("Full commit diff will be available after GitHub API integration.")
+                    Muted(if (commit.filesChanged < 0) "Changes available on GitHub" else "${commit.filesChanged} changed files · +${commit.additions} / −${commit.deletions}")
+                    Muted("Full commit diff is not loaded in this release.")
                 }
             }
         }
-        item { Muted("Branch selection is a local preview; demo commit history is not branch-filtered.") }
+        item { Muted("Recent commits currently show the default branch. Branch-specific history is coming next.") }
     }
 }
 
@@ -355,7 +403,7 @@ private fun BranchRow(branch: BranchItem, selected: Boolean, onClick: () -> Unit
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(branch.name, fontWeight = FontWeight.Medium)
-                Muted(if (branch.isDefault) "Default branch" else "${branch.ahead} ahead · ${branch.behind} behind")
+                Muted(if (branch.isDefault) "Default branch" else if (branch.ahead < 0 || branch.behind < 0) "Available branch" else "${branch.ahead} ahead · ${branch.behind} behind")
             }
             if (selected) Text("Selected", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
         }
@@ -371,9 +419,9 @@ private fun PullRequestRow(pr: PullRequestItem, onClick: () -> Unit) {
             Status(pr.check)
         }
         Text(pr.title, fontWeight = FontWeight.SemiBold)
-        Muted("${pr.source} → ${pr.target} · ${pr.changes} files")
+        Muted(pr.source + " → " + pr.target + if (pr.changes < 0) "" else " · " + pr.changes + " files")
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Muted("+${pr.additions} / −${pr.deletions} · @${pr.author}", Modifier.weight(1f))
+            Muted((if (pr.additions < 0) "" else "+" + pr.additions + " / −" + pr.deletions + " · ") + "@" + pr.author, Modifier.weight(1f))
             if (pr.requiresReview) Text("Review needed", color = MaterialTheme.colorScheme.primary,
                 style = MaterialTheme.typography.labelSmall)
         }
@@ -381,8 +429,8 @@ private fun PullRequestRow(pr: PullRequestItem, onClick: () -> Unit) {
 }
 
 @Composable
-private fun PullRequestsScreen(prs: List<PullRequestItem>, onPr: (Int) -> Unit) {
-    var needsReviewOnly by rememberSaveable { mutableStateOf(true) }
+private fun PullRequestsScreen(prs: List<PullRequestItem>, onPr: (String) -> Unit) {
+    var needsReviewOnly by rememberSaveable { mutableStateOf(false) }
     val visible = prs.filter { !needsReviewOnly || it.requiresReview }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -396,7 +444,7 @@ private fun PullRequestsScreen(prs: List<PullRequestItem>, onPr: (Int) -> Unit) 
                 FilterChip(selected = !needsReviewOnly, onClick = { needsReviewOnly = false }, label = { Text("All PRs") })
             }
         }
-        items(visible, key = { it.number }) { pr -> PullRequestRow(pr) { onPr(pr.number) } }
+        items(visible, key = { GitPilotViewModel.diffKey(it) }) { pr -> PullRequestRow(pr) { onPr(GitPilotViewModel.diffKey(pr)) } }
         if (visible.isEmpty()) item { Muted("No pull requests in this filter.") }
     }
 }
@@ -451,7 +499,7 @@ private fun WorkflowRow(run: WorkflowRunItem, onClick: () -> Unit) {
         }
         Muted("${run.repo} · ${run.branch} · ${run.age}")
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Muted("${run.steps.size} jobs · run #${run.id}", Modifier.weight(1f))
+            Muted((if (run.steps.isEmpty()) "Tap to inspect jobs" else run.steps.size.toString() + " jobs") + " · run #" + run.id, Modifier.weight(1f))
             Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }

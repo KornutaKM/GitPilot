@@ -1,6 +1,6 @@
 package dev.gitpilot.app.data
 
-enum class CheckStatus { SUCCESS, FAILED, RUNNING, PENDING }
+enum class CheckStatus { SUCCESS, FAILED, RUNNING, PENDING, UNKNOWN }
 
 data class RepositoryItem(
     val id: Int,
@@ -41,7 +41,10 @@ data class PullRequestItem(
     val additions: Int,
     val deletions: Int,
     val check: CheckStatus,
-    val requiresReview: Boolean
+    val requiresReview: Boolean,
+    val owner: String = "acme",
+    val headSha: String = "",
+    val htmlUrl: String = ""
 )
 
 data class WorkflowStep(val name: String, val status: CheckStatus)
@@ -54,7 +57,9 @@ data class WorkflowRunItem(
     val age: String,
     val check: CheckStatus,
     val steps: List<WorkflowStep>,
-    val logExcerpt: String
+    val logExcerpt: String,
+    val owner: String = "acme",
+    val htmlUrl: String = ""
 )
 
 data class Workspace(

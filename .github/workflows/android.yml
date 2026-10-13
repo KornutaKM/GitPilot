@@ -25,7 +25,7 @@ jobs:
         with:
           gradle-version: '8.13'
       - name: Unit tests and debug APK
-        run: gradle --no-daemon testDebugUnitTest assembleDebug
+        run: gradle --no-daemon testDebugUnitTest assembleDebug -Pgitpilot.githubClientId="${{ vars.GITPILOT_GITHUB_CLIENT_ID }}"
       - uses: actions/upload-artifact@v4
         if: success()
         with:
