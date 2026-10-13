@@ -21,6 +21,13 @@ class GitHubDomainTest {
         assertEquals(fullSha, commit.fullSha)
     }
 
+    @Test fun pinnedRepositoriesComeFirstWithoutLosingRecencyWithinGroups() {
+        val demo = DemoWorkspaceRepository.snapshot().repositories
+        val input = listOf(demo[3], demo[0], demo[1], demo[2])
+        val ordered = prioritizeRepositories(input)
+        assertEquals(listOf(demo[0].id, demo[1].id, demo[2].id, demo[3].id), ordered.map { it.id })
+    }
+
     @Test fun unknownDoesNotMeanSuccessful() {
         assertNotEquals(CheckStatus.SUCCESS, CheckStatus.UNKNOWN)
     }

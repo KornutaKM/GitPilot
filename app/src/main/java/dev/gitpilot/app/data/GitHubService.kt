@@ -103,7 +103,7 @@ class GitHubDeviceAuth(private val http: GitHubHttp = GitHubHttp()) {
 data class WorkspaceLoadResult(val workspace: Workspace, val warnings: List<String>)
 
 class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
-    suspend fun load(username: String, token: String?): WorkspaceLoadResult {
+    suspend fun load(username: String, token: String?, pinned: Set<String> = emptySet()): WorkspaceLoadResult {
         val signedIn = !token.isNullOrBlank()
         val route = if (signedIn) {
             "/user/repos?sort=pushed&affiliation=owner%2Ccollaborator%2Corganization_member&per_page=20"
@@ -112,7 +112,10 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
         }
         val repos = JSONArray(http.get(route, token))
         val entries = (0 until repos.length()).map { repos.getJSONObject(it) }
-        val all = entries.map { repositoryFromJson(it) }
+        val all = prioritizeRepositories(entries.map { json ->
+            val item = repositoryFromJson(json)
+            item.copy(starred = (item.owner + "/" + item.name).lowercase() in pinned)
+        })
         val branches = mutableMapOf<Long, List<BranchItem>>()
         val commits = mutableMapOf<Long, List<CommitItem>>()
         val prs = mutableListOf<PullRequestItem>()

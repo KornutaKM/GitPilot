@@ -315,7 +315,7 @@ private fun Dashboard(
         item { Text("Needs attention", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
         items(failed) { run -> WorkflowRow(run, onClick = { onWorkflow(run.id) }) }
         items(reviews) { pr -> PullRequestRow(pr, onClick = { onPr(GitPilotViewModel.diffKey(pr)) }) }
-        item { Text("Recent repositories", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
+        item { Text("Pinned and recent repositories", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
         items(ws.repositories.take(6)) { repo -> RepositoryRow(repo, onClick = { onRepo(repo.id) }) }
         if (ws.repositories.isEmpty()) item { Muted("No repositories loaded. Open Account to browse a public GitHub profile.") }
         item { Muted("Live GitHub data. Use the refresh button in the top bar to fetch new results.") }
@@ -390,6 +390,9 @@ private fun RepositoryDetail(
                 Muted("DEFAULT BRANCH")
                 Text(repo.branch, fontWeight = FontWeight.SemiBold)
                 Muted(repo.owner + " · " + repo.language)
+                OutlinedButton(onClick = { model.togglePin(repo) }) {
+                    Text(if (repo.starred) "Unpin repository" else "Pin repository")
+                }
             }
         }
         item { Text("Branches", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }

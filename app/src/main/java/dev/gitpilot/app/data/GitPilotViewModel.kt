@@ -58,7 +58,7 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                 val token = session.read()
                 val user = if (token == null) null else service.viewerLogin(token)
                 val selected = user ?: mutable.value.publicUsername
-                val result = service.load(selected, token)
+                val result = service.load(selected, token, preferences.getStringSet("pinned_repositories", emptySet()).orEmpty().toSet())
                 mutable.update {
                     it.copy(workspace = result.workspace, loading = false,
                         authenticatedAs = user, warnings = result.warnings,
@@ -71,6 +71,20 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                 mutable.update { it.copy(loading = false, error = cleanError(e)) }
             }
         }
+    }
+
+    fun togglePin(repo: RepositoryItem) {
+        val key = (repo.owner + "/" + repo.name).lowercase()
+        val pins = preferences.getStringSet("pinned_repositories", emptySet()).orEmpty().toMutableSet()
+        if (key in pins) pins.remove(key) else pins.add(key)
+        preferences.edit().putStringSet("pinned_repositories", pins).apply()
+        mutable.update { current ->
+            val repos = current.workspace.repositories.map { item ->
+                item.copy(starred = (item.owner + "/" + item.name).lowercase() in pins)
+            }
+            current.copy(workspace = current.workspace.copy(repositories = prioritizeRepositories(repos)))
+        }
+        refresh()
     }
 
     fun setPublicUsername(input: String) {

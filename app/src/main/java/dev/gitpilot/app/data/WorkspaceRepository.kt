@@ -71,6 +71,11 @@ data class Workspace(
     val commits: Map<Long, List<CommitItem>>
 )
 
+
+/** Keep the API's recency order within pinned and unpinned groups. */
+fun prioritizeRepositories(repositories: List<RepositoryItem>): List<RepositoryItem> =
+    repositories.sortedWith(compareByDescending { it.starred })
+
 interface WorkspaceRepository {
     fun snapshot(): Workspace
 }
