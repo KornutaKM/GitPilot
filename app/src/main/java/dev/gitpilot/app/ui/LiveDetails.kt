@@ -35,6 +35,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.gitpilot.app.data.DiscussionEntry
 import dev.gitpilot.app.data.CheckStatus
 import dev.gitpilot.app.data.PullRequestFile
 import dev.gitpilot.app.data.PullRequestItem
@@ -60,6 +61,11 @@ fun LivePullRequestDetail(
     files: List<PullRequestFile>?,
     loading: Boolean,
     authenticated: Boolean,
+    busy: Boolean,
+    discussion: List<DiscussionEntry>?,
+    discussionLoading: Boolean,
+    onLoadDiscussion: () -> Unit,
+    onPostComment: (String) -> Unit,
     onReview: (String, String) -> Unit,
     onMerge: () -> Unit
 ) {
@@ -67,6 +73,8 @@ fun LivePullRequestDetail(
     var reviewEvent by remember(pr.owner, pr.repo, pr.number) { mutableStateOf<String?>(null) }
     var reviewMessage by remember(pr.owner, pr.repo, pr.number) { mutableStateOf("") }
     var mergeConfirmation by remember(pr.owner, pr.repo, pr.number) { mutableStateOf(false) }
+    var commentDraft by remember(pr.owner, pr.repo, pr.number) { mutableStateOf("") }
+    var confirmComment by remember(pr.owner, pr.repo, pr.number) { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -113,6 +121,71 @@ fun LivePullRequestDetail(
             }
         }
         item {
+            Text("Conversation", style = MaterialTheme.typography.titleLarge)
+            Text("GitHub issue discussion and inline review comments (first 50 of each).",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (discussion == null) {
+                Text(if (discussionLoading) "Loading discussion…" else "Discussion unavailable. Retry below.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else if (discussion.isEmpty()) {
+                Text("No discussion comments on this pull request.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (discussion != null) {
+            items(discussion, key = { it.kind.name + "-" + it.id }) { entry ->
+                LiveCard {
+                    Text("@" + entry.author + " · " + entry.createdAt.take(10),
+                        fontWeight = FontWeight.Medium)
+                    if (entry.path != null) {
+                        Text("Inline review · " + entry.path + (entry.line?.let { ":" + it } ?: ""),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary)
+                    }
+                    SelectionContainer {
+                        Text(entry.body.take(4_000) + if (entry.body.length > 4_000) "…" else "",
+                            style = MaterialTheme.typography.bodyMedium)
+                    }
+                    if (entry.htmlUrl.startsWith("https://github.com/")) {
+                        OutlinedButton(onClick = { browser.openUri(entry.htmlUrl) }) {
+                            Text("View on GitHub")
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            LiveCard {
+                OutlinedButton(
+                    onClick = onLoadDiscussion,
+                    enabled = !discussionLoading
+                ) { Text(if (discussionLoading) "Loading comments…" else "Refresh conversation") }
+                if (authenticated) {
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = commentDraft,
+                        onValueChange = { commentDraft = it },
+                        label = { Text("New conversation comment") },
+                        minLines = 2,
+                        maxLines = 6
+                    )
+                    Text("This comment will be visible on GitHub.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Button(
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !busy && commentDraft.isNotBlank() && commentDraft.trim().length <= 10_000,
+                        onClick = { confirmComment = true }
+                    ) { Text("Review and post comment") }
+                } else {
+                    Text("Sign in with GitHub to post a comment.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        item {
             LiveCard {
                 Text("Review actions", style = MaterialTheme.typography.titleMedium)
                 if (!authenticated) {
@@ -120,16 +193,38 @@ fun LivePullRequestDetail(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall)
                 }
-                Button(modifier = Modifier.fillMaxWidth(), enabled = authenticated,
+                Button(modifier = Modifier.fillMaxWidth(), enabled = authenticated && !busy,
                     onClick = { reviewEvent = "APPROVE" }) { Text("Approve") }
-                OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = authenticated,
+                OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = authenticated && !busy,
                     onClick = { reviewEvent = "REQUEST_CHANGES" }) { Text("Request changes") }
                 HorizontalDivider()
                 OutlinedButton(modifier = Modifier.fillMaxWidth(),
-                    enabled = authenticated && pr.headSha.isNotBlank(),
+                    enabled = authenticated && !busy && pr.headSha.isNotBlank(),
                     onClick = { mergeConfirmation = true }) { Text("Merge (squash)") }
             }
         }
+    }
+
+    if (confirmComment) {
+        AlertDialog(
+            onDismissRequest = { confirmComment = false },
+            title = { Text("Publish comment on GitHub?") },
+            text = {
+                Text("This posts a public PR conversation comment in " + pr.owner + "/" + pr.repo +
+                    "#" + pr.number + ".\n\n" + commentDraft.take(500))
+            },
+            confirmButton = {
+                Button(enabled = !busy && commentDraft.trim().isNotEmpty(),
+                    onClick = {
+                        onPostComment(commentDraft)
+                        commentDraft = ""
+                        confirmComment = false
+                    }) { Text("Post comment") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmComment = false }) { Text("Cancel") }
+            }
+        )
     }
 
     if (reviewEvent != null) {
@@ -176,10 +271,13 @@ fun LiveWorkflowDetail(
     jobLogs: Map<Long, String>,
     loadingJobId: Long?,
     onOpenJobLog: (WorkflowStep) -> Unit,
-    onRerunFailed: () -> Unit
+    onRerunFailed: () -> Unit,
+    onCancelRun: () -> Unit,
+    busy: Boolean
 ) {
     val browser = LocalUriHandler.current
     var confirmRetry by remember(run.id) { mutableStateOf(false) }
+    var confirmCancel by remember(run.id) { mutableStateOf(false) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(20.dp),
@@ -249,11 +347,33 @@ fun LiveWorkflowDetail(
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Button(
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = authenticated && run.check == CheckStatus.FAILED,
+                    enabled = authenticated && !busy && run.check == CheckStatus.FAILED,
                     onClick = { confirmRetry = true }
                 ) { Text("Rerun failed jobs") }
+                OutlinedButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = authenticated && !busy && run.check == CheckStatus.RUNNING,
+                    onClick = { confirmCancel = true }
+                ) { Text("Cancel running workflow") }
             }
         }
+    }
+    if (confirmCancel) {
+        AlertDialog(
+            onDismissRequest = { confirmCancel = false },
+            title = { Text("Cancel workflow run?") },
+            text = { Text("Ask GitHub to cancel run #" + run.id +
+                ". This may interrupt a deployment or test process.") },
+            confirmButton = {
+                Button(enabled = !busy, onClick = {
+                    onCancelRun()
+                    confirmCancel = false
+                }) { Text("Cancel run on GitHub") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmCancel = false }) { Text("Back") }
+            }
+        )
     }
     if (confirmRetry) {
         AlertDialog(

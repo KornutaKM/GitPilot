@@ -374,6 +374,44 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
         )
     }
 
+    /** Load the first 50 issue conversation and 50 inline review comments. */
+    suspend fun pullDiscussion(pr: PullRequestItem, token: String?): List<DiscussionEntry> {
+        val root = "/repos/" + enc(pr.owner) + "/" + enc(pr.repo)
+        val issue = JSONArray(http.get(root + "/issues/" + pr.number + "/comments?per_page=50", token))
+        val review = JSONArray(http.get(root + "/pulls/" + pr.number + "/comments?per_page=50", token))
+        val conversation = (0 until issue.length()).map { index ->
+            val value = issue.getJSONObject(index)
+            DiscussionEntry(
+                id = value.getLong("id"),
+                kind = DiscussionKind.CONVERSATION,
+                author = value.optJSONObject("user")?.optString("login").orEmpty(),
+                body = value.optString("body").takeIf { it != "null" }.orEmpty(),
+                createdAt = value.optString("created_at"),
+                htmlUrl = value.optString("html_url")
+            )
+        }
+        val inline = (0 until review.length()).map { index ->
+            val value = review.getJSONObject(index)
+            DiscussionEntry(
+                id = value.getLong("id"),
+                kind = DiscussionKind.INLINE_REVIEW,
+                author = value.optJSONObject("user")?.optString("login").orEmpty(),
+                body = value.optString("body").takeIf { it != "null" }.orEmpty(),
+                createdAt = value.optString("created_at"),
+                htmlUrl = value.optString("html_url"),
+                path = value.optString("path").takeIf { it.isNotBlank() && it != "null" },
+                line = if (value.isNull("line")) null else value.optInt("line")
+            )
+        }
+        return combineDiscussion(conversation, inline)
+    }
+
+    suspend fun postPullComment(pr: PullRequestItem, token: String, rawBody: String) {
+        val root = "/repos/" + enc(pr.owner) + "/" + enc(pr.repo)
+        http.post(root + "/issues/" + pr.number + "/comments", token,
+            JSONObject().put("body", validateDiscussionDraft(rawBody)))
+    }
+
     suspend fun pullFiles(pr: PullRequestItem, token: String?): List<PullRequestFile> {
         val path = "/repos/" + enc(pr.owner) + "/" + enc(pr.repo) +
             "/pulls/" + pr.number + "/files?per_page=30"
@@ -465,6 +503,12 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
         val path = "/repos/" + enc(repo.owner) + "/" + enc(repo.name) +
             "/actions/workflows/" + workflowId + "/dispatches"
         http.post(path, token, JSONObject().put("ref", ref).put("inputs", JSONObject(inputs)))
+    }
+
+    suspend fun cancelWorkflowRun(run: WorkflowRunItem, token: String) {
+        val path = "/repos/" + enc(run.owner) + "/" + enc(run.repo) +
+            "/actions/runs/" + run.id + "/cancel"
+        http.post(path, token)
     }
 
     suspend fun rerunFailed(run: WorkflowRunItem, token: String) {

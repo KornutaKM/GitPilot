@@ -29,6 +29,8 @@ data class GitPilotState(
     val deviceCode: GitHubDeviceCode? = null,
     val signingIn: Boolean = false,
     val diffs: Map<String, List<PullRequestFile>> = emptyMap(),
+    val discussion: Map<String, List<DiscussionEntry>> = emptyMap(),
+    val loadingDiscussionKey: String? = null,
     val jobs: Map<Long, List<WorkflowStep>> = emptyMap(),
     val jobLogs: Map<Long, String> = emptyMap(),
     val loadingJobId: Long? = null,
@@ -68,7 +70,8 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 authenticatedAs = null,
                 workspace = Workspace(emptyList(), emptyList(), emptyList(), emptyMap(), emptyMap()),
-                diffs = emptyMap(), jobs = emptyMap(), jobLogs = emptyMap(),
+                diffs = emptyMap(), discussion = emptyMap(), loadingDiscussionKey = null,
+                jobs = emptyMap(), jobLogs = emptyMap(),
                 branchCommits = emptyMap(), commitFiles = emptyMap(),
                 definitions = emptyMap(), loading = false, detailLoading = false,
                 loadingJobId = null, loadingDefinitionsId = null, branchLoading = false,
@@ -106,7 +109,8 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                 mutable.update {
                     it.copy(workspace = result.workspace, loading = false,
                         authenticatedAs = user, warnings = result.warnings,
-                        diffs = emptyMap(), jobs = emptyMap(), jobLogs = emptyMap(), loadingJobId = null,
+                        diffs = emptyMap(), discussion = emptyMap(), loadingDiscussionKey = null,
+                jobs = emptyMap(), jobLogs = emptyMap(), loadingJobId = null,
                         branchCommits = emptyMap(),
                         commitFiles = emptyMap(), branchLoading = false, detailLoading = false)
                 }
@@ -228,6 +232,28 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun loadPullDiscussion(pr: PullRequestItem, force: Boolean = false) {
+        val key = diffKey(pr)
+        if (!force && mutable.value.discussion.containsKey(key)) return
+        if (mutable.value.loadingDiscussionKey == key) return
+        val epoch = authEpoch
+        viewModelScope.launch {
+            if (epoch != authEpoch) return@launch
+            mutable.update { it.copy(loadingDiscussionKey = key, error = null) }
+            try {
+                val entries = service.pullDiscussion(pr, currentToken())
+                if (epoch == authEpoch) mutable.update {
+                    it.copy(discussion = it.discussion + (key to entries), loadingDiscussionKey = null)
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                if (epoch == authEpoch) mutable.update {
+                    it.copy(loadingDiscussionKey = null, error = cleanError(e))
+                }
+            }
+        }
+    }
+
     fun loadPullFiles(pr: PullRequestItem) {
         val key = diffKey(pr)
         if (mutable.value.diffs.containsKey(key)) return
@@ -294,6 +320,18 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun comment(pr: PullRequestItem, rawDraft: String) {
+        val validated = try {
+            validateDiscussionDraft(rawDraft)
+        } catch (e: IllegalArgumentException) {
+            mutable.update { it.copy(error = e.message ?: "Invalid comment") }
+            return
+        }
+        runAuthorized("Comment posted on GitHub") { token ->
+            service.postPullComment(pr, token, validated)
+        }
+    }
+
     fun review(pr: PullRequestItem, event: String, message: String) {
         runAuthorized("Review submitted to GitHub") { token ->
             if (event == "REQUEST_CHANGES" && message.isBlank()) throw IOException("Explain the requested changes.")
@@ -342,6 +380,16 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         }
         runAuthorized("Workflow dispatch accepted by GitHub") { token ->
             service.dispatchWorkflow(repo, workflow.id, trimmed, token, inputs)
+        }
+    }
+
+    fun cancelWorkflowRun(run: WorkflowRunItem) {
+        if (run.check != CheckStatus.RUNNING) {
+            mutable.update { it.copy(error = "Only running or queued workflows can be cancelled.") }
+            return
+        }
+        runAuthorized("GitHub accepted the workflow cancellation") { token ->
+            service.cancelWorkflowRun(run, token)
         }
     }
 

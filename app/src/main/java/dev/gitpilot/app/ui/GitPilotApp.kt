@@ -181,10 +181,18 @@ fun GitPilotApp(model: GitPilotViewModel = viewModel()) {
                     RepositoryDetail(repo, workspace, model, onBack = { detail = null })
                 }
                 is Details.PullRequest -> workspace.pullRequests.find { GitPilotViewModel.diffKey(it) == active.key }?.let { pr ->
-                    LaunchedEffect(active.key) { model.loadPullFiles(pr) }
+                    LaunchedEffect(active.key, workspace) {
+                        model.loadPullFiles(pr)
+                        model.loadPullDiscussion(pr)
+                    }
                     LivePullRequestDetail(
                         pr, state.diffs[active.key], state.detailLoading,
                         authenticated = state.authenticatedAs != null,
+                        busy = state.loading,
+                        discussion = state.discussion[active.key],
+                        discussionLoading = state.loadingDiscussionKey == active.key,
+                        onLoadDiscussion = { model.loadPullDiscussion(pr, force = true) },
+                        onPostComment = { model.comment(pr, it) },
                         onReview = { event, message -> model.review(pr, event, message) },
                         onMerge = { model.merge(pr) }
                     )
@@ -197,7 +205,9 @@ fun GitPilotApp(model: GitPilotViewModel = viewModel()) {
                         jobLogs = state.jobLogs,
                         loadingJobId = state.loadingJobId,
                         onOpenJobLog = { job -> model.loadJobLog(run, job) },
-                        onRerunFailed = { model.rerunFailed(run) }
+                        onRerunFailed = { model.rerunFailed(run) },
+                        onCancelRun = { model.cancelWorkflowRun(run) },
+                        busy = state.loading
                     )
                 }
                 null -> when (tab) {
