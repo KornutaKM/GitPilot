@@ -28,6 +28,7 @@ import dev.gitpilot.app.data.GitPilotState
 import dev.gitpilot.app.data.RepositoryItem
 import dev.gitpilot.app.data.WorkflowDefinition
 import dev.gitpilot.app.data.validGitRefName
+import dev.gitpilot.app.data.parseWorkflowInputs
 
 /**
  * A bounded workflow_dispatch launcher. We do not pretend to support required custom
@@ -37,7 +38,7 @@ import dev.gitpilot.app.data.validGitRefName
 fun WorkflowLauncher(
     state: GitPilotState,
     onLoad: (RepositoryItem) -> Unit,
-    onDispatch: (RepositoryItem, WorkflowDefinition, String) -> Unit,
+    onDispatch: (RepositoryItem, WorkflowDefinition, String, String) -> Unit,
     onDismiss: () -> Unit
 ) {
     val repos = state.workspace.repositories
@@ -49,11 +50,14 @@ fun WorkflowLauncher(
     var selectedWorkflowId by remember { mutableStateOf<Long?>(null) }
     val workflow = definitions?.firstOrNull { it.id == selectedWorkflowId }
     var ref by remember { mutableStateOf(repo?.branch.orEmpty()) }
+    var inputs by remember { mutableStateOf("") }
+    val inputError = remember(inputs) { runCatching { parseWorkflowInputs(inputs) }.exceptionOrNull()?.message }
     var confirm by remember { mutableStateOf(false) }
 
     LaunchedEffect(repo?.id) {
         selectedWorkflowId = null
         ref = repo?.branch.orEmpty()
+        inputs = ""
         if (repo != null) onLoad(repo)
     }
 
@@ -114,13 +118,27 @@ fun WorkflowLauncher(
                     singleLine = true,
                     label = { Text("Branch or tag ref") }
                 )
-                Text("Only workflows configured for workflow_dispatch can run manually. Workflows requiring custom inputs are not supported in this version.",
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = inputs,
+                    onValueChange = { inputs = it },
+                    minLines = 3,
+                    maxLines = 6,
+                    label = { Text("Optional inputs, one key=value per line") },
+                    placeholder = { Text("environment=staging\nversion=1.2.0") },
+                    isError = inputError != null
+                )
+                if (inputError != null) {
+                    Text(inputError, color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall)
+                }
+                Text("A workflow must support workflow_dispatch. Up to 10 inputs are accepted. Never enter passwords or secrets as inputs; use GitHub Actions secrets instead.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
         confirmButton = {
-            Button(enabled = repo != null && workflow != null && validGitRefName(ref),
+            Button(enabled = repo != null && workflow != null && validGitRefName(ref) && inputError == null,
                 onClick = { confirm = true }) { Text("Review action") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
@@ -132,11 +150,12 @@ fun WorkflowLauncher(
             title = { Text("Start workflow on GitHub?") },
             text = {
                 Text("Run '" + workflow.name + "' in " + repo.owner + "/" + repo.name +
-                    " at ref '" + ref + "'? It may deploy software or change external systems depending on the workflow.")
+                    " at ref '" + ref + "' with " + parseWorkflowInputs(inputs).size +
+                    " input(s)? It may deploy software or change external systems.")
             },
             confirmButton = {
                 Button(onClick = {
-                    onDispatch(repo, workflow, ref)
+                    onDispatch(repo, workflow, ref, inputs)
                     confirm = false
                     onDismiss()
                 }) { Text("Start workflow") }

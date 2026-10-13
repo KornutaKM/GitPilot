@@ -457,11 +457,14 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
         }.filter { it.active }
     }
 
-    suspend fun dispatchWorkflow(repo: RepositoryItem, workflowId: Long, ref: String, token: String) {
+    suspend fun dispatchWorkflow(
+        repo: RepositoryItem, workflowId: Long, ref: String, token: String,
+        inputs: Map<String, String>
+    ) {
         require(workflowId > 0) { "Invalid workflow" }
         val path = "/repos/" + enc(repo.owner) + "/" + enc(repo.name) +
             "/actions/workflows/" + workflowId + "/dispatches"
-        http.post(path, token, JSONObject().put("ref", ref).put("inputs", JSONObject()))
+        http.post(path, token, JSONObject().put("ref", ref).put("inputs", JSONObject(inputs)))
     }
 
     suspend fun rerunFailed(run: WorkflowRunItem, token: String) {

@@ -326,14 +326,22 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun dispatchWorkflow(repo: RepositoryItem, workflow: WorkflowDefinition, ref: String) {
+    fun dispatchWorkflow(
+        repo: RepositoryItem, workflow: WorkflowDefinition, ref: String, rawInputs: String
+    ) {
         val trimmed = ref.trim()
         if (!validGitRefName(trimmed)) {
             mutable.update { it.copy(error = "Select a valid branch or tag reference.") }
             return
         }
+        val inputs = try {
+            parseWorkflowInputs(rawInputs)
+        } catch (e: IllegalArgumentException) {
+            mutable.update { it.copy(error = e.message ?: "Invalid workflow inputs.") }
+            return
+        }
         runAuthorized("Workflow dispatch accepted by GitHub") { token ->
-            service.dispatchWorkflow(repo, workflow.id, trimmed, token)
+            service.dispatchWorkflow(repo, workflow.id, trimmed, token, inputs)
         }
     }
 

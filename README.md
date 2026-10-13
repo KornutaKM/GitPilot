@@ -2,14 +2,14 @@
 
 Native GitHub control center built with Kotlin, Jetpack Compose and Material 3.
 
-## Version 0.3.0-alpha
+## Version 0.4.0-alpha
 
 Live public repository browsing now works without a GitHub login. GitHub App Device Flow sign-in and remote operations (reviews, squash merge and retry failed workflow jobs) are implemented; signed-in features require a GitHub App Client ID and installation permissions.
 
 - Overview: pinned and recent repositories, pull requests and GitHub Actions from live GitHub REST endpoints. Pinned projects remain accessible even after dropping out of GitHub recent activity.
 - Repositories: default-branch and selected-branch history, actual commit patches and confirmed creation of a remote branch from a chosen commit.
 - PRs: real changed-file patches loaded on demand, project and review-status filters, optional review/comment and merge confirmation.
-- Actions: real workflow runs and job logs, rerun failed jobs, and manually dispatch active workflows from a chosen branch or tag (no custom inputs yet).
+- Actions: real workflow runs and job logs, rerun failed jobs, and manually dispatch active workflows from a chosen branch or tag, with up to ten key=value inputs.
 - Account: choose public GitHub username, connect/disconnect GitHub App user authorization.
 - Native light/dark theme, manual refresh and visible API errors.
 
@@ -43,7 +43,7 @@ In public mode, remote mutations are disabled. When signed in, every review, mer
 - Branch-specific commits load when selecting a branch; individual commit patches load on tap. Creating a remote branch requires authorization and confirmation.
 - PR check status comes from GitHub Checks for a bounded subset of PRs; it remains Unknown if no check data is available.
 - On-demand PR file patches and workflow job lists. Job log previews show bounded output; full logs remain available on GitHub. Signed log redirects never receive the GitHub bearer token.
-- Manual dispatch is available only for workflows enabled with workflow_dispatch and no required custom inputs. No push notifications, offline persistent cache, advanced API pagination, rebase or code editor.
+- Manual dispatch is available for workflows enabled with workflow_dispatch; supply any required inputs as key=value lines. No push notifications, offline persistent cache, advanced API pagination, rebase or code editor.
 - Anonymous API use is rate limited by GitHub; refresh is manual.
 
 ## Code structure
@@ -67,3 +67,7 @@ Signing out clears the in-memory workspace, private diffs, cached jobs, workflow
 ## UX improvements
 
 The GitHub device authorization code can be copied directly to the Android clipboard before opening the browser. A failed or empty first workspace load now offers an explicit retry action; empty repository and Actions filters no longer silently show blank screens.
+
+## Manual workflow parameters
+
+For Actions → Run a workflow, select a repository, an active workflow and branch or tag. Supply optional inputs one per line, e.g. environment=staging. GitHub's workflow_dispatch endpoint is used and requires Actions write permission. The app validates names and duplicates but does not infer the required inputs from workflow YAML. Never enter credentials as inputs; use repository secrets.

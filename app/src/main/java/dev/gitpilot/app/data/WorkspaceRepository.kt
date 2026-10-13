@@ -73,6 +73,29 @@ data class Workspace(
 
 
 /** Keep the API's recency order within pinned and unpinned groups. */
+/**
+ * Parse manual GitHub workflow_dispatch inputs, entered one key=value per line.
+ * Keep this independent of Android for deterministic JVM unit tests.
+ */
+fun parseWorkflowInputs(raw: String): Map<String, String> {
+    val lines = raw.lines().filter { it.isNotBlank() }
+    require(lines.size <= 10) { "GitHub supports up to 10 workflow inputs." }
+    val values = linkedMapOf<String, String>()
+    for (line in lines) {
+        val equalsAt = line.indexOf('=')
+        require(equalsAt > 0) { "Use one key=value pair per line." }
+        val key = line.substring(0, equalsAt).trim()
+        val value = line.substring(equalsAt + 1).trim()
+        require(key.matches(Regex("[A-Za-z_][A-Za-z0-9_-]{0,63}"))) {
+            "Invalid input name: " + key.take(40)
+        }
+        require(value.length <= 1024) { "Each workflow input must be no longer than 1024 characters." }
+        require(key !in values) { "Duplicate workflow input name: " + key }
+        values[key] = value
+    }
+    return values
+}
+
 fun validGitRefName(value: String): Boolean {
     if (value.isEmpty() || value.length > 120 ||
         !value.matches(Regex("[A-Za-z0-9._/-]+"))) return false
