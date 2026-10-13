@@ -37,6 +37,7 @@ data class GitPilotState(
     val branchCommits: Map<String, List<CommitItem>> = emptyMap(),
     val directoryContents: Map<String, List<GitHubFileEntry>> = emptyMap(),
     val filePreviews: Map<String, GitHubFilePreview> = emptyMap(),
+    val lastWrittenFileKey: String? = null,
     val loadingDirectoryKey: String? = null,
     val loadingFileKey: String? = null,
     val comparisons: Map<String, BranchComparison> = emptyMap(),
@@ -79,7 +80,7 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                 diffs = emptyMap(), discussion = emptyMap(), loadingDiscussionKey = null,
                 jobs = emptyMap(), jobLogs = emptyMap(),
                 branchCommits = emptyMap(), comparisons = emptyMap(), loadingComparisonKey = null,
-                directoryContents = emptyMap(), filePreviews = emptyMap(),
+                directoryContents = emptyMap(), filePreviews = emptyMap(), lastWrittenFileKey = null,
                 loadingDirectoryKey = null, loadingFileKey = null,
                 commitFiles = emptyMap(),
                 definitions = emptyMap(), loading = false, detailLoading = false,
@@ -385,6 +386,25 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun createTextFile(
+        repo: RepositoryItem, branch: String, directory: String,
+        name: String, text: String, message: String
+    ) {
+        val (path, cleanMessage) = try {
+            validateNewTextFile(directory, name, text, message)
+        } catch (e: IllegalArgumentException) {
+            mutable.update { it.copy(error = e.message ?: "Invalid new file.") }
+            return
+        }
+        val key = repositoryPathKey(repo, branch, path)
+        mutable.update { it.copy(lastWrittenFileKey = null) }
+        runAuthorized("New file committed to GitHub", onSuccess = {
+            mutable.update { it.copy(lastWrittenFileKey = key) }
+        }) { token ->
+            service.createTextFile(repo, branch, directory, name, text, cleanMessage, token)
+        }
+    }
+
     fun commitExistingFile(
         repo: RepositoryItem, branch: String, preview: GitHubFilePreview,
         editedText: String, rawCommitMessage: String
@@ -399,7 +419,11 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
             mutable.update { it.copy(error = e.message ?: "Invalid commit.") }
             return
         }
-        runAuthorized("File committed on GitHub") { token ->
+        val key = repositoryPathKey(repo, branch, preview.path)
+        mutable.update { it.copy(lastWrittenFileKey = null) }
+        runAuthorized("File committed on GitHub", onSuccess = {
+            mutable.update { it.copy(lastWrittenFileKey = key) }
+        }) { token ->
             service.updateExistingTextFile(repo, branch, preview, editedText, message, token)
         }
     }
@@ -514,7 +538,11 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         runAuthorized("GitHub accepted the retry request") { token -> service.rerunFailed(run, token) }
     }
 
-    private fun runAuthorized(success: String, operation: suspend (String) -> Unit) {
+    private fun runAuthorized(
+        success: String,
+        onSuccess: (() -> Unit)? = null,
+        operation: suspend (String) -> Unit
+    ) {
         if (mutationInProgress) {
             mutable.update { it.copy(error = "An operation is already in progress.") }
             return
@@ -531,6 +559,7 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                 mutable.update { it.copy(loading = true, error = null, message = null) }
                 operation(token)
                 if (epoch == authEpoch) {
+                    onSuccess?.invoke()
                     mutable.update { it.copy(message = success) }
                     refresh()
                 }
@@ -547,6 +576,7 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun consumeFileWriteEvent() { mutable.update { it.copy(lastWrittenFileKey = null) } }
     fun consumeMessage() { mutable.update { it.copy(message = null) } }
     fun dismissError() { mutable.update { it.copy(error = null) } }
 

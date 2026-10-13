@@ -67,8 +67,24 @@ fun RepositoryFilesScreen(
     var editedText by remember(repo.id, branch, selectedKey) { mutableStateOf("") }
     var commitMessage by remember(repo.id, branch, selectedKey) { mutableStateOf("") }
     var confirmCommit by remember(repo.id, branch, selectedKey) { mutableStateOf(false) }
+    var creatingNewFile by remember(repo.id, branch, currentDirectory) { mutableStateOf(false) }
+    var discardConfirmation by remember(repo.id, branch, selectedKey) { mutableStateOf(false) }
+
+    LaunchedEffect(state.lastWrittenFileKey, selectedKey) {
+        if (selectedKey != null && state.lastWrittenFileKey == selectedKey) {
+            editMode = false
+            commitMessage = ""
+            confirmCommit = false
+            model.consumeFileWriteEvent()
+        }
+    }
 
     fun goBack() {
+        if (selectedFile != null && editMode &&
+            editedText != state.filePreviews[selectedKey]?.text) {
+            discardConfirmation = true
+            return
+        }
         if (selectedFile != null) selectedFile = null
         else if (currentDirectory.isNotEmpty()) currentDirectory = parentDirectory(currentDirectory)
         else onClose()
@@ -154,7 +170,7 @@ fun RepositoryFilesScreen(
                                             editedText.toByteArray(Charsets.UTF_8).size <= 96_000,
                                         onClick = { confirmCommit = true }
                                     ) { Text("Review file commit") }
-                                    TextButton(onClick = { editMode = false }) { Text("Discard local edits") }
+                                    TextButton(onClick = { if (editedText != preview.text) discardConfirmation = true else editMode = false }) { Text("Discard local edits") }
                                 } else {
                                     SelectionContainer {
                                         Text(
@@ -189,6 +205,15 @@ fun RepositoryFilesScreen(
                 }
             }
         } else {
+            if (state.authenticatedAs != null) {
+                item {
+                    Button(
+                        enabled = !state.loading,
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { creatingNewFile = true }
+                    ) { Text("Create new text file") }
+                }
+            }
             if (files == null) {
                 item {
                     Text(if (state.loadingDirectoryKey == dirKey) "Loading directory…"
@@ -245,6 +270,37 @@ fun RepositoryFilesScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+    }
+    if (creatingNewFile) {
+        NewTextFileDialog(
+            repo = repo, branch = branch, directory = currentDirectory,
+            busy = state.loading,
+            lastWrittenFileKey = state.lastWrittenFileKey,
+            onCreate = { name, content, message ->
+                model.createTextFile(repo, branch, currentDirectory, name, content, message)
+            },
+            onCompleted = { model.consumeFileWriteEvent() },
+            onDismiss = { creatingNewFile = false }
+        )
+    }
+    if (discardConfirmation) {
+        AlertDialog(
+            onDismissRequest = { discardConfirmation = false },
+            title = { Text("Discard unsaved edits?") },
+            text = { Text("Your local changes have not been committed to GitHub.") },
+            confirmButton = {
+                Button(onClick = {
+                    discardConfirmation = false
+                    editMode = false
+                    selectedFile = null
+                }) { Text("Discard edits") }
+            },
+            dismissButton = {
+                TextButton(onClick = { discardConfirmation = false }) {
+                    Text("Continue editing")
+                }
+            }
+        )
     }
     if (confirmCommit && preview?.text != null) {
         AlertDialog(

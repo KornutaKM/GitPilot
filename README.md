@@ -2,7 +2,7 @@
 
 Native GitHub control center built with Kotlin, Jetpack Compose and Material 3.
 
-## Version 0.9.0-alpha
+## Version 1.0.0-alpha
 
 Live public repository browsing now works without a GitHub login. GitHub App Device Flow sign-in and remote operations (reviews, squash merge and retry failed workflow jobs) are implemented; signed-in features require a GitHub App Client ID and installation permissions.
 
@@ -93,3 +93,10 @@ Signed-in users may edit a **complete UTF-8 preview of an existing file** (at mo
 ## Mobile diff readability
 
 PR files, commit diffs and branch comparisons now render bounded unified patches with distinct colors for additions, removals, metadata and hunk markers. The renderer works on GitHub-provided patches and deliberately truncates very long diffs to protect UI performance. Full diffs remain accessible on GitHub.
+
+## Alpha 1.0 — create files and protect unsaved edits
+
+- From any directory in the repository browser, signed-in users can create **one new UTF-8 file** and commit it to the chosen branch. Filename, UTF-8 size and commit message are validated before confirmation. The request intentionally omits the existing-file SHA, so GitHub rejects an attempt to overwrite a file already present.
+- The existing-file editor now keeps a local draft when GitHub rejects a change. It exits edit mode only after GitHub reports a successful write. A commit conflict is surfaced and does not discard unsaved text.
+- Back navigation and the discard action warn before throwing away unsaved text. GitHub credentials, permissions and branch protection remain authoritative.
+- A successful file write invalidates repository and file previews so the next fetch returns the remote version. Authenticated operations are not simulated.

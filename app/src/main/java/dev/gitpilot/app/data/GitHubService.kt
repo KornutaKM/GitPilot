@@ -133,8 +133,13 @@ class GitHubHttp {
                 val reason = runCatching { JSONObject(result).optString("message") }.getOrNull().orEmpty()
                 val limited = code == 429 || (code == 403 &&
                     conn.getHeaderField("X-RateLimit-Remaining") == "0")
-                val explanation = if (limited) "GitHub API rate limit reached. Retry after the limit resets."
-                    else "GitHub HTTP " + code + if (reason.isBlank()) "" else ": " + reason.take(160)
+                val explanation = when {
+                    limited -> "GitHub API rate limit reached. Retry after the limit resets."
+                    code == 409 -> "GitHub conflict: this branch or file changed. Refresh before retrying."
+                    code == 422 -> "GitHub rejected this change. The file may already exist, or a repository rule may apply. " +
+                        reason.take(130)
+                    else -> "GitHub HTTP " + code + if (reason.isBlank()) "" else ": " + reason.take(160)
+                }
                 throw GitHubApiException(code, explanation, limited)
             }
             result
@@ -504,6 +509,29 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
                 "Binary file; open it on GitHub.", url)
         }
         return GitHubFilePreview(file.name, file.path, text, null, url, json.optString("sha"))
+    }
+
+    suspend fun createTextFile(
+        repo: RepositoryItem,
+        branch: String,
+        directory: String,
+        filename: String,
+        text: String,
+        commitMessage: String,
+        token: String
+    ): String {
+        require(validGitRefName(branch)) { "Invalid target branch." }
+        val (path, message) = validateNewTextFile(directory, filename, text, commitMessage)
+        val apiPath = contentsPath(repo, branch, path).substringBefore("?ref=")
+        // No SHA is included: GitHub creates a new file, but refuses to overwrite
+        // an existing file without the current blob SHA.
+        http.put(apiPath, token, JSONObject()
+            .put("message", message)
+            .put("content", java.util.Base64.getEncoder().encodeToString(
+                text.toByteArray(Charsets.UTF_8)))
+            .put("branch", branch)
+        )
+        return path
     }
 
     suspend fun updateExistingTextFile(

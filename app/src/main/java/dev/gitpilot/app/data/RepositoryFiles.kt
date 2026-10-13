@@ -62,3 +62,32 @@ fun validateFileCommit(
     }
     return clean
 }
+
+
+/**
+ * The quick-create screen supports one new text file at a time.
+ * A simple filename (not a path) prevents accidental commits outside the selected directory.
+ */
+fun validateNewTextFile(
+    directory: String,
+    rawName: String,
+    text: String,
+    message: String
+): Pair<String, String> {
+    val name = rawName.trim()
+    require(name.matches(Regex("[A-Za-z0-9._-]{1,100}"))) {
+        "Use a filename of 1–100 letters, digits, dots, dashes or underscores."
+    }
+    require(name != "." && name != ".." && name != ".git" &&
+        !name.endsWith(".lock") && !name.endsWith(".")) { "Invalid Git filename." }
+    val parent = validateRepositoryPath(directory)
+    val path = validateRepositoryPath(if (parent.isEmpty()) name else parent + "/" + name)
+    require(text.length <= 32_000 && text.toByteArray(Charsets.UTF_8).size <= 96_000) {
+        "File must fit in 32,000 characters and 96 KB."
+    }
+    val cleanMessage = message.trim()
+    require(cleanMessage.isNotBlank() && cleanMessage.length <= 180) {
+        "Enter a commit message of 1–180 characters."
+    }
+    return path to cleanMessage
+}
