@@ -2,7 +2,7 @@
 
 Native GitHub control center built with Kotlin, Jetpack Compose and Material 3.
 
-## Version 0.8.0-alpha
+## Version 0.9.0-alpha
 
 Live public repository browsing now works without a GitHub login. GitHub App Device Flow sign-in and remote operations (reviews, squash merge and retry failed workflow jobs) are implemented; signed-in features require a GitHub App Client ID and installation permissions.
 
@@ -11,7 +11,7 @@ Live public repository browsing now works without a GitHub login. GitHub App Dev
 - PRs: real changed-file patches, GitHub conversation and inline review history, public PR comments with a confirmation dialog, review actions, and squash merge.
 - Actions: real workflow runs and job logs, explicit cancellation of running runs, rerun failed jobs, and manually dispatch active workflows from a chosen branch or tag, with up to ten key=value inputs.
 - Account: choose public GitHub username, connect/disconnect GitHub App user authorization.
-- Native light/dark theme, manual refresh and visible API errors.
+- Native light/dark theme, color-coded unified diffs, manual refresh and visible API errors.
 
 ## Run
 
@@ -89,3 +89,7 @@ Repository details now have **Browse files** for the selected branch. GitPilot u
 ## Editing and committing a file
 
 Signed-in users may edit a **complete UTF-8 preview of an existing file** (at most 32,000 characters) and submit a one-file commit on the selected branch. Choose **Edit and commit file**, modify the text, enter a commit message and confirm the remote write. The GitHub Contents API receives the previously fetched file blob SHA: concurrent edits cause a conflict instead of silently overwriting newer content. GitHub enforces Contents write permission and protected-branch rules. The editor refuses unchanged, binary, truncated and oversized files and never stores unsaved edits outside the current screen. Multi-file staging, creating new files, amend/rebase, and conflict resolution are not supported. To edit larger files use GitHub on the web.
+
+## Mobile diff readability
+
+PR files, commit diffs and branch comparisons now render bounded unified patches with distinct colors for additions, removals, metadata and hunk markers. The renderer works on GitHub-provided patches and deliberately truncates very long diffs to protect UI performance. Full diffs remain accessible on GitHub.

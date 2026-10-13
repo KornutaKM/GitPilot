@@ -114,8 +114,7 @@ fun LivePullRequestDetail(
                     Text(file.status, style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary)
                     SelectionContainer {
-                        Text(file.patch, modifier = Modifier.horizontalScroll(rememberScrollState()),
-                            fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                        DiffPatch(file.patch, maxLines = 240)
                     }
                 }
             }

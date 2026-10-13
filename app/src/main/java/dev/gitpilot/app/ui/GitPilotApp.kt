@@ -472,11 +472,7 @@ private fun RepositoryDetail(
                                 Text(file.filename,
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.primary)
-                                Text(file.patch.take(3000),
-                                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 12.sp,
-                                    lineHeight = 18.sp)
+                                DiffPatch(file.patch, maxLines = 160)
                             }
                             if (comparison.changedFiles.size > 10) Muted("Showing first 10 changed files.")
                         }
@@ -531,9 +527,7 @@ private fun RepositoryDetail(
                         patches.take(15).forEach { file ->
                             Text(file.filename, style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.primary)
-                            Text(file.patch, modifier = Modifier.horizontalScroll(rememberScrollState()),
-                                fontFamily = FontFamily.Monospace, fontSize = 12.sp,
-                                lineHeight = 18.sp)
+                            DiffPatch(file.patch, maxLines = 160)
                         }
                         if (patches.size > 15) Muted("Showing the first 15 files.")
                     }
