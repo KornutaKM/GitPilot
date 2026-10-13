@@ -7,7 +7,7 @@ Native GitHub control center built with Kotlin, Jetpack Compose and Material 3.
 Live public repository browsing now works without a GitHub login. GitHub App Device Flow sign-in and remote operations (reviews, squash merge and retry failed workflow jobs) are implemented; signed-in features require a GitHub App Client ID and installation permissions.
 
 - Overview: recent repositories, pull requests and GitHub Actions from live GitHub REST endpoints.
-- Repositories: default-branch commits and branch list.
+- Repositories: default-branch and selected-branch history, with on-demand actual commit diff.
 - PRs: real changed-file patches loaded on demand, optional review/comment and merge confirmation.
 - Actions: real workflow runs and on-demand job lists, full-log links, rerun failed jobs with confirmation.
 - Account: choose public GitHub username, connect/disconnect GitHub App user authorization.
@@ -40,7 +40,7 @@ In public mode, remote mutations are disabled. When signed in, every review, mer
 ## Alpha limitations
 
 - Up to 12 public or 20 authenticated repositories in the list, with 4 public or 8 authenticated repositories queried for related PRs and Actions.
-- Commits are fetched from the default branch. Selecting other branches is a UI-only preview for now.
+- Branch-specific commits are loaded when selecting a branch; individual commit file patches load on tap.
 - PR check status is Unknown rather than assumed.
 - On-demand PR file patches and workflow job lists. Full logs open in GitHub.
 - No push notifications, offline persistent cache, advanced API pagination, rebase or code editor.
