@@ -28,6 +28,9 @@ data class GitPilotState(
     val signingIn: Boolean = false,
     val diffs: Map<String, List<PullRequestFile>> = emptyMap(),
     val jobs: Map<Long, List<WorkflowStep>> = emptyMap(),
+    val branchCommits: Map<String, List<CommitItem>> = emptyMap(),
+    val commitFiles: Map<String, List<PullRequestFile>> = emptyMap(),
+    val branchLoading: Boolean = false,
     val detailLoading: Boolean = false
 )
 
@@ -59,7 +62,8 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                 mutable.update {
                     it.copy(workspace = result.workspace, loading = false,
                         authenticatedAs = user, warnings = result.warnings,
-                        diffs = emptyMap(), jobs = emptyMap(), detailLoading = false)
+                        diffs = emptyMap(), jobs = emptyMap(), branchCommits = emptyMap(),
+                        commitFiles = emptyMap(), branchLoading = false, detailLoading = false)
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
@@ -125,6 +129,34 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         session.clear()
         mutable.update { it.copy(authenticatedAs = null, message = "Signed out") }
         refresh()
+    }
+
+    fun loadBranchCommits(repo: RepositoryItem, branch: String) {
+        val key = branchKey(repo, branch)
+        if (mutable.value.branchCommits.containsKey(key)) return
+        viewModelScope.launch {
+            mutable.update { it.copy(branchLoading = true, error = null) }
+            try {
+                val commits = service.commitsForBranch(repo, branch, session.read())
+                mutable.update { it.copy(branchCommits = it.branchCommits + (key to commits), branchLoading = false) }
+            } catch (e: Exception) {
+                mutable.update { it.copy(branchLoading = false, error = cleanError(e)) }
+            }
+        }
+    }
+
+    fun loadCommitFiles(repo: RepositoryItem, commit: CommitItem) {
+        val key = commitKey(repo, commit)
+        if (mutable.value.commitFiles.containsKey(key)) return
+        viewModelScope.launch {
+            mutable.update { it.copy(detailLoading = true, error = null) }
+            try {
+                val files = service.commitFiles(repo, commit, session.read())
+                mutable.update { it.copy(commitFiles = it.commitFiles + (key to files), detailLoading = false) }
+            } catch (e: Exception) {
+                mutable.update { it.copy(detailLoading = false, error = cleanError(e)) }
+            }
+        }
     }
 
     fun loadPullFiles(pr: PullRequestItem) {
@@ -193,6 +225,8 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
 
     companion object {
         fun diffKey(pr: PullRequestItem): String = pr.owner + "/" + pr.repo + "#" + pr.number
+        fun branchKey(repo: RepositoryItem, branch: String): String = repo.owner + "/" + repo.name + ":" + branch
+        fun commitKey(repo: RepositoryItem, commit: CommitItem): String = repo.owner + "/" + repo.name + "@" + commit.fullSha
         private fun cleanError(error: Exception): String =
             (error.message ?: "Request failed").take(220)
     }

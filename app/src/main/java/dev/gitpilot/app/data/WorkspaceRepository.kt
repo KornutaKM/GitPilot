@@ -27,7 +27,8 @@ data class CommitItem(
     val time: String,
     val filesChanged: Int,
     val additions: Int,
-    val deletions: Int
+    val deletions: Int,
+    val fullSha: String = sha
 )
 
 data class PullRequestItem(

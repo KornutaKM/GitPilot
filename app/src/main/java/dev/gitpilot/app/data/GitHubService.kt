@@ -140,7 +140,7 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
                         .orEmpty().ifBlank { details.optJSONObject("author")?.optString("name").orEmpty() }
                     val sha = item.getString("sha")
                     CommitItem(sha.take(8), details.optString("message").lineSequence().firstOrNull().orEmpty(),
-                        author, details.optJSONObject("author")?.optString("date").orEmpty().take(10), -1, 0, 0)
+                        author, details.optJSONObject("author")?.optString("date").orEmpty().take(10), -1, 0, 0, sha)
                 }
             } catch (e: Exception) {
                 warnings += repo.name + " commits: " + e.message.orEmpty()
@@ -203,6 +203,33 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
         return (0 until array.length()).map {
             val item = array.getJSONObject(it)
             WorkflowStep(item.optString("name"), parseStatus(item.optString("status"), item.optString("conclusion")))
+        }
+    }
+
+    suspend fun commitsForBranch(repo: RepositoryItem, branch: String, token: String?): List<CommitItem> {
+        val path = "/repos/" + enc(repo.owner) + "/" + enc(repo.name) +
+            "/commits?sha=" + enc(branch) + "&per_page=12"
+        val array = JSONArray(http.get(path, token))
+        return (0 until array.length()).map { i ->
+            val item = array.getJSONObject(i)
+            val details = item.getJSONObject("commit")
+            val sha = item.getString("sha")
+            val author = item.optJSONObject("author")?.optString("login").orEmpty()
+                .ifBlank { details.optJSONObject("author")?.optString("name").orEmpty() }
+            CommitItem(sha.take(8), details.optString("message").lineSequence().firstOrNull().orEmpty(),
+                author, details.optJSONObject("author")?.optString("date").orEmpty().take(10),
+                -1, 0, 0, sha)
+        }
+    }
+
+    suspend fun commitFiles(repo: RepositoryItem, commit: CommitItem, token: String?): List<PullRequestFile> {
+        val path = "/repos/" + enc(repo.owner) + "/" + enc(repo.name) +
+            "/commits/" + enc(commit.fullSha)
+        val array = JSONObject(http.get(path, token)).optJSONArray("files") ?: JSONArray()
+        return (0 until array.length()).map { i ->
+            val file = array.getJSONObject(i)
+            PullRequestFile(file.optString("filename"), file.optString("status"),
+                file.optString("patch", "Diff unavailable for this file").take(12000))
         }
     }
 

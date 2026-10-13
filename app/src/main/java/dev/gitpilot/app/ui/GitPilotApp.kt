@@ -2,6 +2,8 @@ package dev.gitpilot.app.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -169,7 +171,7 @@ fun GitPilotApp(model: GitPilotViewModel = viewModel()) {
                 )
             } else when (val active = detail) {
                 is Details.Repository -> workspace.repositories.find { it.id == active.id }?.let { repo ->
-                    RepositoryDetail(repo, workspace, onBack = { detail = null })
+                    RepositoryDetail(repo, workspace, model, onBack = { detail = null })
                 }
                 is Details.PullRequest -> workspace.pullRequests.find { GitPilotViewModel.diffKey(it) == active.key }?.let { pr ->
                     LaunchedEffect(active.key) { model.loadPullFiles(pr) }
@@ -359,9 +361,20 @@ private fun RepositoriesScreen(repos: List<RepositoryItem>, onRepo: (Int) -> Uni
 }
 
 @Composable
-private fun RepositoryDetail(repo: RepositoryItem, ws: Workspace, onBack: () -> Unit) {
+private fun RepositoryDetail(
+    repo: RepositoryItem, ws: Workspace, model: GitPilotViewModel, onBack: () -> Unit
+) {
+    val state by model.state.collectAsState()
     var selectedBranch by remember(repo.id) { mutableStateOf(repo.branch) }
-    var selectedCommit by remember(repo.id) { mutableStateOf<CommitItem?>(null) }
+    var selectedCommit by remember(repo.id, selectedBranch) { mutableStateOf<CommitItem?>(null) }
+    val branchKey = GitPilotViewModel.branchKey(repo, selectedBranch)
+    val history = if (selectedBranch == repo.branch) ws.commits[repo.id]
+        else state.branchCommits[branchKey]
+
+    LaunchedEffect(repo.id, selectedBranch) {
+        if (selectedBranch != repo.branch) model.loadBranchCommits(repo, selectedBranch)
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
@@ -372,26 +385,57 @@ private fun RepositoryDetail(repo: RepositoryItem, ws: Workspace, onBack: () -> 
             Panel {
                 Muted("DEFAULT BRANCH")
                 Text(repo.branch, fontWeight = FontWeight.SemiBold)
-                Muted("${repo.owner} · ${repo.language}")
+                Muted(repo.owner + " · " + repo.language)
             }
         }
         item { Text("Branches", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
-        items(ws.branches[repo.id].orEmpty()) { branch ->
+        items(ws.branches[repo.id].orEmpty(), key = { it.name }) { branch ->
             BranchRow(branch, selected = selectedBranch == branch.name) { selectedBranch = branch.name }
         }
-        item { Text("Recent commits", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
-        items(ws.commits[repo.id].orEmpty()) { commit ->
-            Panel(onClick = { selectedCommit = if (selectedCommit?.sha == commit.sha) null else commit }) {
+        item {
+            Text("Commits · " + selectedBranch, style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold)
+        }
+        if (history == null) {
+            item {
+                Muted(if (state.branchLoading) "Loading commits from GitHub…"
+                    else "History is unavailable for this branch. Retry from the toolbar.")
+            }
+        } else if (history.isEmpty()) {
+            item { Muted("No commits returned for this branch.") }
+        }
+        items(history.orEmpty(), key = { it.fullSha }) { commit ->
+            Panel(onClick = {
+                if (selectedCommit?.fullSha == commit.fullSha) {
+                    selectedCommit = null
+                } else {
+                    selectedCommit = commit
+                    model.loadCommitFiles(repo, commit)
+                }
+            }) {
                 Text(commit.subject, fontWeight = FontWeight.Medium)
-                Muted("${commit.sha} · ${commit.author} · ${commit.time}")
-                if (selectedCommit?.sha == commit.sha) {
+                Muted(commit.sha + " · " + commit.author + " · " + commit.time)
+                if (selectedCommit?.fullSha == commit.fullSha) {
                     HorizontalDivider()
-                    Muted(if (commit.filesChanged < 0) "Changes available on GitHub" else "${commit.filesChanged} changed files · +${commit.additions} / −${commit.deletions}")
-                    Muted("Full commit diff is not loaded in this release.")
+                    val patches = state.commitFiles[GitPilotViewModel.commitKey(repo, commit)]
+                    if (patches == null) {
+                        Muted(if (state.detailLoading) "Loading commit diff…" else "Diff not loaded yet.")
+                    } else if (patches.isEmpty()) {
+                        Muted("GitHub returned no diff for this commit.")
+                    } else {
+                        Text(patches.size.toString() + " changed files", fontWeight = FontWeight.SemiBold)
+                        patches.take(15).forEach { file ->
+                            Text(file.filename, style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary)
+                            Text(file.patch, modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                fontFamily = FontFamily.Monospace, fontSize = 12.sp,
+                                lineHeight = 18.sp)
+                        }
+                        if (patches.size > 15) Muted("Showing the first 15 files.")
+                    }
                 }
             }
         }
-        item { Muted("Recent commits currently show the default branch. Branch-specific history is coming next.") }
     }
 }
 
