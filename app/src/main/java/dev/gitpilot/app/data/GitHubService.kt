@@ -113,8 +113,8 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
         val repos = JSONArray(http.get(route, token))
         val entries = (0 until repos.length()).map { repos.getJSONObject(it) }
         val all = entries.map { repositoryFromJson(it) }
-        val branches = mutableMapOf<Int, List<BranchItem>>()
-        val commits = mutableMapOf<Int, List<CommitItem>>()
+        val branches = mutableMapOf<Long, List<BranchItem>>()
+        val commits = mutableMapOf<Long, List<CommitItem>>()
         val prs = mutableListOf<PullRequestItem>()
         val runs = mutableListOf<WorkflowRunItem>()
         val warnings = mutableListOf<String>()
@@ -151,12 +151,16 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
                     val item = response.getJSONObject(i)
                     val head = item.getJSONObject("head")
                     val base = item.getJSONObject("base")
+                    val requested = item.optJSONArray("requested_reviewers") ?: JSONArray()
+                    val reviewForViewer = signedIn && (0 until requested.length()).any { j ->
+                        requested.getJSONObject(j).optString("login").equals(username, ignoreCase = true)
+                    }
                     prs += PullRequestItem(item.getInt("number"), item.optString("title"), repo.name,
                         head.optString("ref"), base.optString("ref"),
                         item.optJSONObject("user")?.optString("login").orEmpty(),
                         item.optInt("changed_files", -1), item.optInt("additions", -1),
                         item.optInt("deletions", -1), CheckStatus.UNKNOWN,
-                        false, repo.owner, head.optString("sha"), item.optString("html_url"))
+                        reviewForViewer, repo.owner, head.optString("sha"), item.optString("html_url"))
                 }
             } catch (e: Exception) {
                 warnings += repo.name + " PRs: " + e.message.orEmpty()
@@ -177,6 +181,34 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
                 }
             } catch (e: Exception) {
                 warnings += repo.name + " Actions: " + e.message.orEmpty()
+            }
+        }
+        // Limit per-PR checks requests; lack of access is not equivalent to passed CI.
+        val maxChecks = if (signedIn) 12 else 5
+        for (index in 0 until minOf(prs.size, maxChecks)) {
+            val pr = prs[index]
+            if (pr.headSha.isBlank()) continue
+            val path = "/repos/" + enc(pr.owner) + "/" + enc(pr.repo) +
+                "/commits/" + enc(pr.headSha) + "/check-runs?per_page=100"
+            try {
+                val checks = JSONObject(http.get(path, token)).optJSONArray("check_runs") ?: JSONArray()
+                if (checks.length() == 0) continue
+                val all = (0 until checks.length()).map { checks.getJSONObject(it) }
+                val status = when {
+                    all.any { it.optString("conclusion") in listOf("failure", "timed_out", "cancelled", "action_required") } ->
+                        CheckStatus.FAILED
+                    all.any { it.optString("status") != "completed" } ->
+                        CheckStatus.RUNNING
+                    all.all { it.optString("conclusion") == "success" || it.optString("conclusion") == "skipped" } ->
+                        CheckStatus.SUCCESS
+                    else -> CheckStatus.UNKNOWN
+                }
+                prs[index] = pr.copy(check = status)
+            } catch (e: GitHubApiException) {
+                warnings += "Checks: " + e.message.orEmpty()
+                if (e.statusCode == 403 || e.statusCode == 401) break
+            } catch (e: Exception) {
+                warnings += "Checks: " + e.message.orEmpty()
             }
         }
         return WorkspaceLoadResult(
@@ -254,7 +286,7 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
 
     private fun repositoryFromJson(item: JSONObject): RepositoryItem {
         val language = if (item.isNull("language")) "Unknown" else item.optString("language")
-        return RepositoryItem(item.getInt("id"), item.optString("name"),
+        return RepositoryItem(item.getLong("id"), item.optString("name"),
             item.getJSONObject("owner").optString("login"),
             item.optString("description").takeIf { it != "null" }.orEmpty(),
             language, item.optString("default_branch"),

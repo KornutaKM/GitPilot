@@ -113,6 +113,19 @@ fun ConnectionScreen(
                 }
             }
         }
+        if (state.warnings.isNotEmpty()) {
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Some GitHub data could not be loaded", fontWeight = FontWeight.Medium)
+                        state.warnings.take(5).forEach { warning ->
+                            Text(warning, style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        }
         item {
             HorizontalDivider()
             Text("Manual refresh only. Public browsing is limited to recent repositories to respect GitHub API rate limits. All merge, review and rerun actions require authenticated GitHub access.",

@@ -81,7 +81,7 @@ import dev.gitpilot.app.data.Workspace
 enum class MainTab(val label: String) { HOME("Home"), REPOS("Repos"), PRS("PRs"), ACTIONS("Actions") }
 
 private sealed interface Details {
-    data class Repository(val id: Int) : Details
+    data class Repository(val id: Long) : Details
     data class PullRequest(val key: String) : Details
     data class Workflow(val id: Long) : Details
 }
@@ -291,7 +291,7 @@ private fun Stat(number: String, label: String, modifier: Modifier = Modifier) {
 @Composable
 private fun Dashboard(
     ws: Workspace,
-    onRepo: (Int) -> Unit,
+    onRepo: (Long) -> Unit,
     onPr: (String) -> Unit,
     onWorkflow: (Long) -> Unit
 ) {
@@ -338,7 +338,7 @@ private fun RepositoryRow(repo: RepositoryItem, onClick: () -> Unit) {
 }
 
 @Composable
-private fun RepositoriesScreen(repos: List<RepositoryItem>, onRepo: (Int) -> Unit) {
+private fun RepositoriesScreen(repos: List<RepositoryItem>, onRepo: (Long) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     val visible = repos.filter { (it.name + it.owner + it.description).contains(query, ignoreCase = true) }
     LazyColumn(

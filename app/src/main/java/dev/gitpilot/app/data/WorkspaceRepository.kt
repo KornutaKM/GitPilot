@@ -3,7 +3,7 @@ package dev.gitpilot.app.data
 enum class CheckStatus { SUCCESS, FAILED, RUNNING, PENDING, UNKNOWN }
 
 data class RepositoryItem(
-    val id: Int,
+    val id: Long,
     val name: String,
     val owner: String,
     val description: String,
@@ -67,8 +67,8 @@ data class Workspace(
     val repositories: List<RepositoryItem>,
     val pullRequests: List<PullRequestItem>,
     val workflows: List<WorkflowRunItem>,
-    val branches: Map<Int, List<BranchItem>>,
-    val commits: Map<Int, List<CommitItem>>
+    val branches: Map<Long, List<BranchItem>>,
+    val commits: Map<Long, List<CommitItem>>
 )
 
 interface WorkspaceRepository {
@@ -106,26 +106,26 @@ object DemoWorkspaceRepository : WorkspaceRepository {
             )
         ),
         branches = mapOf(
-            1 to listOf(BranchItem("main", true, 0, 0), BranchItem("develop", false, 12, 0), BranchItem("feature/auth", false, 2, 1)),
-            2 to listOf(BranchItem("main", true, 0, 0), BranchItem("develop", false, 7, 0), BranchItem("feature/settings", false, 3, 0)),
-            3 to listOf(BranchItem("main", true, 0, 0), BranchItem("develop", false, 4, 0), BranchItem("feature/checkout", false, 6, 1)),
-            4 to listOf(BranchItem("main", true, 0, 0))
+            1L to listOf(BranchItem("main", true, 0, 0), BranchItem("develop", false, 12, 0), BranchItem("feature/auth", false, 2, 1)),
+            2L to listOf(BranchItem("main", true, 0, 0), BranchItem("develop", false, 7, 0), BranchItem("feature/settings", false, 3, 0)),
+            3L to listOf(BranchItem("main", true, 0, 0), BranchItem("develop", false, 4, 0), BranchItem("feature/checkout", false, 6, 1)),
+            4L to listOf(BranchItem("main", true, 0, 0))
         ),
         commits = mapOf(
-            1 to listOf(
+            1L to listOf(
                 CommitItem("c82af18", "fix: refresh access token", "alex", "12m ago", 3, 28, 9),
                 CommitItem("90e6c31", "test: add authentication coverage", "alex", "1h ago", 2, 57, 4),
                 CommitItem("6c1d8ae", "chore: update dependencies", "sam", "Yesterday", 4, 17, 12)
             ),
-            2 to listOf(
+            2L to listOf(
                 CommitItem("b6a92e1", "refactor: settings navigation", "sam", "28m ago", 8, 205, 114),
                 CommitItem("2dd8a81", "feat: add account settings", "sam", "Yesterday", 4, 72, 11)
             ),
-            3 to listOf(
+            3L to listOf(
                 CommitItem("ec390fd", "fix: order totals", "morgan", "42m ago", 2, 19, 6),
                 CommitItem("a30fe1d", "test: checkout flow", "morgan", "1h ago", 3, 41, 8)
             ),
-            4 to listOf(CommitItem("f92c0da", "docs: update onboarding", "morgan", "2d ago", 2, 25, 3))
+            4L to listOf(CommitItem("f92c0da", "docs: update onboarding", "morgan", "2d ago", 2, 25, 3))
         )
     )
 }
