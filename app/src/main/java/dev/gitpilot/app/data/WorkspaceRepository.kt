@@ -119,6 +119,16 @@ fun missingPinnedRepositories(
 fun prioritizeRepositories(repositories: List<RepositoryItem>): List<RepositoryItem> =
     repositories.sortedWith(compareByDescending { it.starred })
 
+/** Deduplicate by GitHub's immutable repository ID across the pinned and paged result sets. */
+/** Bound manual pagination to five pages and only offer it when GitHub returns a full page. */
+fun hasAnotherRepositoryPage(received: Int, pageSize: Int, page: Int): Boolean =
+    page in 1..4 && received == pageSize
+
+fun mergeRepositoryPages(
+    existing: List<RepositoryItem>, additional: List<RepositoryItem>
+): List<RepositoryItem> = prioritizeRepositories((existing + additional).distinctBy { it.id })
+
+
 interface WorkspaceRepository {
     fun snapshot(): Workspace
 }

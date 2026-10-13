@@ -2,7 +2,7 @@
 
 Native GitHub control center built with Kotlin, Jetpack Compose and Material 3.
 
-## Version 1.0.0-alpha
+## Version 1.1.0-alpha
 
 Live public repository browsing now works without a GitHub login. GitHub App Device Flow sign-in and remote operations (reviews, squash merge and retry failed workflow jobs) are implemented; signed-in features require a GitHub App Client ID and installation permissions.
 
@@ -39,7 +39,7 @@ In public mode, remote mutations are disabled. When signed in, comments, reviews
 
 ## Alpha limitations
 
-- Up to 12 public or 20 authenticated repositories in the list, with 4 public or 8 authenticated repositories queried for related PRs and Actions.
+- Repositories load in pages of 12 public or 20 authenticated items, up to five pages per manual browsing session. Only 4 public or 8 authenticated repositories are monitored for PRs and Actions.
 - Branch-specific commits load when selecting a branch; individual commit patches load on tap. Creating a remote branch requires authorization and confirmation.
 - PR check status comes from GitHub Checks for a bounded subset of PRs; it remains Unknown if no check data is available.
 - On-demand PR file patches, discussion history (first 50 issue comments and first 50 inline review comments) and workflow job lists. Job log previews show bounded output; full logs remain available on GitHub. Signed log redirects never receive the GitHub bearer token.
@@ -100,3 +100,7 @@ PR files, commit diffs and branch comparisons now render bounded unified patches
 - The existing-file editor now keeps a local draft when GitHub rejects a change. It exits edit mode only after GitHub reports a successful write. A commit conflict is surfaced and does not discard unsaved text.
 - Back navigation and the discard action warn before throwing away unsaved text. GitHub credentials, permissions and branch protection remain authoritative.
 - A successful file write invalidates repository and file previews so the next fetch returns the remote version. Authenticated operations are not simulated.
+
+## Alpha 1.1 — paginated repository discovery
+
+The Repositories screen now offers **Load more repositories** when GitHub returns a full page. Pages are bounded to five per browsing session (up to 60 public or 100 authenticated recent repositories, plus accessible pinned projects). New items are deduplicated by immutable GitHub repository ID and locally pinned entries remain prioritized. Repositories from subsequent pages fetch branches and default-branch commits only when opened, reducing unnecessary API calls. Manual refresh restarts pagination at page one. Background polling and unlimited crawling are intentionally not implemented.

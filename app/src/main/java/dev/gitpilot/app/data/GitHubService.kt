@@ -219,16 +219,62 @@ class GitHubDeviceAuth(private val http: GitHubHttp = GitHubHttp()) {
 
 data class WorkflowDefinition(val id: Long, val name: String, val active: Boolean)
 
-data class WorkspaceLoadResult(val workspace: Workspace, val warnings: List<String>)
+data class WorkspaceLoadResult(
+    val workspace: Workspace, val warnings: List<String>, val hasMoreRepositories: Boolean
+)
+
+data class RepositoryPage(val repositories: List<RepositoryItem>, val hasMore: Boolean)
 
 class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
+    private fun repoListPath(username: String, signedIn: Boolean, page: Int): String {
+        require(page in 1..5) { "Repository paging is limited to five pages." }
+        return if (signedIn) {
+            "/user/repos?sort=pushed&affiliation=owner%2Ccollaborator%2Corganization_member" +
+                "&per_page=20&page=" + page
+        } else {
+            "/users/" + enc(username) + "/repos?sort=pushed&per_page=12&page=" + page
+        }
+    }
+
+    suspend fun repositoryPage(
+        username: String, token: String?, page: Int, pinned: Set<String>
+    ): RepositoryPage {
+        val limit = if (token.isNullOrBlank()) 12 else 20
+        val array = JSONArray(http.get(repoListPath(username, !token.isNullOrBlank(), page), token))
+        val list = (0 until array.length()).map { i ->
+            val repo = repositoryFromJson(array.getJSONObject(i))
+            repo.copy(starred = (repo.owner + "/" + repo.name).lowercase() in pinned)
+        }
+        return RepositoryPage(list, hasAnotherRepositoryPage(array.length(), limit, page))
+    }
+
+    /** Fetch details only after a repo from a later page is opened. */
+    suspend fun repositoryDetails(repo: RepositoryItem, token: String?): Pair<List<BranchItem>, List<CommitItem>> {
+        val root = "/repos/" + enc(repo.owner) + "/" + enc(repo.name)
+        val branchJson = JSONArray(http.get(root + "/branches?per_page=30", token))
+        val branches = (0 until branchJson.length()).map { i ->
+            val item = branchJson.getJSONObject(i)
+            BranchItem(item.getString("name"), item.getString("name") == repo.branch, -1, -1)
+        }
+        val commitJson = JSONArray(http.get(root + "/commits?per_page=12", token))
+        val commits = (0 until commitJson.length()).map { i ->
+            val item = commitJson.getJSONObject(i)
+            val details = item.getJSONObject("commit")
+            val sha = item.getString("sha")
+            val author = item.optJSONObject("author")?.optString("login").orEmpty()
+                .ifBlank { details.optJSONObject("author")?.optString("name").orEmpty() }
+            CommitItem(
+                sha.take(8), details.optString("message").lineSequence().firstOrNull().orEmpty(),
+                author, details.optJSONObject("author")?.optString("date").orEmpty().take(10),
+                -1, 0, 0, sha
+            )
+        }
+        return branches to commits
+    }
+
     suspend fun load(username: String, token: String?, pinned: Set<String> = emptySet()): WorkspaceLoadResult {
         val signedIn = !token.isNullOrBlank()
-        val route = if (signedIn) {
-            "/user/repos?sort=pushed&affiliation=owner%2Ccollaborator%2Corganization_member&per_page=20"
-        } else {
-            "/users/" + enc(username) + "/repos?sort=pushed&per_page=12"
-        }
+        val route = repoListPath(username, signedIn, 1)
         val repos = JSONArray(http.get(route, token))
         val entries = (0 until repos.length()).map { repos.getJSONObject(it) }
         val warnings = mutableListOf<String>()
@@ -375,7 +421,8 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
         }
         return WorkspaceLoadResult(
             Workspace(all, prs, runs.sortedByDescending { it.id }, branches, commits),
-            warnings
+            warnings,
+            hasAnotherRepositoryPage(repos.length(), if (signedIn) 20 else 12, 1)
         )
     }
 

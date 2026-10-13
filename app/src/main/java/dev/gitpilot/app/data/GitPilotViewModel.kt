@@ -21,6 +21,10 @@ data class PullRequestFile(val filename: String, val status: String, val patch: 
 data class GitPilotState(
     val workspace: Workspace = Workspace(emptyList(), emptyList(), emptyList(), emptyMap(), emptyMap()),
     val loading: Boolean = false,
+    val hasMoreRepositories: Boolean = false,
+    val repositoryPage: Int = 1,
+    val loadingMoreRepositories: Boolean = false,
+    val loadingRepoDetailsId: Long? = null,
     val authenticatedAs: String? = null,
     val publicUsername: String = "KornutaKM",
     val error: String? = null,
@@ -65,6 +69,7 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
     private val credentialMutex = Mutex()
     private var authEpoch = 0L
     private var mutationInProgress = false
+    private var workspaceGeneration = 0L
 
     init { refresh() }
 
@@ -84,6 +89,8 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                 loadingDirectoryKey = null, loadingFileKey = null,
                 commitFiles = emptyMap(),
                 definitions = emptyMap(), loading = false, detailLoading = false,
+                hasMoreRepositories = false, repositoryPage = 1,
+                loadingMoreRepositories = false, loadingRepoDetailsId = null,
                 loadingJobId = null, loadingDefinitionsId = null, branchLoading = false,
                 warnings = emptyList()
             )
@@ -109,16 +116,23 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refresh() {
         refreshJob?.cancel()
+        workspaceGeneration += 1
+        val generation = workspaceGeneration
+        val epoch = authEpoch
         refreshJob = viewModelScope.launch {
-            mutable.update { it.copy(loading = true, error = null) }
+            mutable.update { it.copy(loading = true, loadingMoreRepositories = false, error = null) }
             try {
                 val token = currentToken()
                 val user = if (token == null) null else service.viewerLogin(token)
                 val selected = user ?: mutable.value.publicUsername
                 val result = service.load(selected, token, preferences.getStringSet("pinned_repositories", emptySet()).orEmpty().toSet())
+                if (epoch != authEpoch || generation != workspaceGeneration) return@launch
                 mutable.update {
                     it.copy(workspace = result.workspace, loading = false,
                         authenticatedAs = user, warnings = result.warnings,
+                        hasMoreRepositories = result.hasMoreRepositories,
+                        repositoryPage = 1, loadingMoreRepositories = false,
+                        loadingRepoDetailsId = null,
                         diffs = emptyMap(), discussion = emptyMap(), loadingDiscussionKey = null,
                 jobs = emptyMap(), jobLogs = emptyMap(), loadingJobId = null,
                         branchCommits = emptyMap(), comparisons = emptyMap(), loadingComparisonKey = null,
@@ -131,6 +145,75 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 if (e is GitHubApiException && e.statusCode == 401) invalidateSession()
                 mutable.update { it.copy(loading = false, error = cleanError(e)) }
+            }
+        }
+    }
+
+    fun loadMoreRepositories() {
+        val initial = mutable.value
+        if (!initial.hasMoreRepositories || initial.loadingMoreRepositories ||
+            initial.loading || initial.repositoryPage >= 5) return
+        val page = initial.repositoryPage + 1
+        val epoch = authEpoch
+        val generation = workspaceGeneration
+        viewModelScope.launch {
+            if (epoch != authEpoch) return@launch
+            mutable.update { it.copy(loadingMoreRepositories = true, error = null) }
+            try {
+                val token = currentToken()
+                if (epoch != authEpoch || generation != workspaceGeneration) return@launch
+                val username = if (token == null) mutable.value.publicUsername
+                    else mutable.value.authenticatedAs ?: service.viewerLogin(token)
+                val pins = preferences.getStringSet("pinned_repositories", emptySet()).orEmpty().toSet()
+                val result = service.repositoryPage(username, token, page, pins)
+                if (epoch == authEpoch && generation == workspaceGeneration) {
+                    mutable.update { old ->
+                        old.copy(
+                            workspace = old.workspace.copy(repositories =
+                                mergeRepositoryPages(old.workspace.repositories, result.repositories)),
+                            repositoryPage = page,
+                            hasMoreRepositories = result.hasMore,
+                            loadingMoreRepositories = false
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                if (epoch == authEpoch && generation == workspaceGeneration) {
+                    mutable.update { it.copy(loadingMoreRepositories = false, error = cleanError(e)) }
+                }
+            }
+        }
+    }
+
+    fun loadRepositoryDetails(repo: RepositoryItem) {
+        val current = mutable.value
+        if (current.workspace.branches.containsKey(repo.id) &&
+            current.workspace.commits.containsKey(repo.id)) return
+        if (current.loadingRepoDetailsId == repo.id) return
+        val epoch = authEpoch
+        val generation = workspaceGeneration
+        viewModelScope.launch {
+            if (epoch != authEpoch) return@launch
+            mutable.update { it.copy(loadingRepoDetailsId = repo.id, error = null) }
+            try {
+                val (branches, commits) = service.repositoryDetails(repo, currentToken())
+                if (epoch == authEpoch && generation == workspaceGeneration) {
+                    mutable.update { old ->
+                        old.copy(
+                            workspace = old.workspace.copy(
+                                branches = old.workspace.branches + (repo.id to branches),
+                                commits = old.workspace.commits + (repo.id to commits)
+                            ),
+                            loadingRepoDetailsId = null
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                if (epoch == authEpoch && generation == workspaceGeneration) {
+                    mutable.update { it.copy(loadingRepoDetailsId = null, error = cleanError(e)) }
+                }
             }
         }
     }

@@ -216,7 +216,13 @@ fun GitPilotApp(model: GitPilotViewModel = viewModel()) {
                         onPr = { detail = Details.PullRequest(it) },
                         onWorkflow = { detail = Details.Workflow(it) },
                         onRetry = model::refresh, isLoading = state.loading)
-                    MainTab.REPOS -> RepositoriesScreen(workspace.repositories) { detail = Details.Repository(it) }
+                    MainTab.REPOS -> RepositoriesScreen(
+                        repos = workspace.repositories,
+                        hasMore = state.hasMoreRepositories,
+                        loadingMore = state.loadingMoreRepositories,
+                        onLoadMore = model::loadMoreRepositories,
+                        onRepo = { detail = Details.Repository(it) }
+                    )
                     MainTab.PRS -> PullRequestsScreen(workspace.pullRequests) { detail = Details.PullRequest(it) }
                     MainTab.ACTIONS -> ActionsScreen(workspace.workflows,
                         onWorkflow = { detail = Details.Workflow(it) },
@@ -372,7 +378,13 @@ private fun RepositoryRow(repo: RepositoryItem, onClick: () -> Unit) {
 }
 
 @Composable
-private fun RepositoriesScreen(repos: List<RepositoryItem>, onRepo: (Long) -> Unit) {
+private fun RepositoriesScreen(
+    repos: List<RepositoryItem>,
+    hasMore: Boolean,
+    loadingMore: Boolean,
+    onLoadMore: () -> Unit,
+    onRepo: (Long) -> Unit
+) {
     var query by rememberSaveable { mutableStateOf("") }
     val visible = repos.filter { (it.name + it.owner + it.description).contains(query, ignoreCase = true) }
     LazyColumn(
@@ -392,6 +404,20 @@ private fun RepositoriesScreen(repos: List<RepositoryItem>, onRepo: (Long) -> Un
         items(visible, key = { it.id }) { repo -> RepositoryRow(repo) { onRepo(repo.id) } }
         if (visible.isEmpty()) item {
             Muted(if (repos.isEmpty()) "No repositories loaded. Open Account or retry from the top bar." else "No repositories match your search.")
+        }
+        if (hasMore) {
+            item {
+                Button(
+                    enabled = !loadingMore,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onLoadMore
+                ) {
+                    Text(if (loadingMore) "Loading repositories…" else "Load more repositories")
+                }
+            }
+        }
+        if (!hasMore && repos.isNotEmpty()) item {
+            Muted("Showing loaded repositories. The dashboard monitors a limited number of projects.")
         }
     }
 }
@@ -413,6 +439,9 @@ private fun RepositoryDetail(
     val history = if (selectedBranch == repo.branch) ws.commits[repo.id]
         else state.branchCommits[branchKey]
 
+    LaunchedEffect(repo.id, ws) {
+        model.loadRepositoryDetails(repo)
+    }
     LaunchedEffect(repo.id, selectedBranch) {
         if (selectedBranch != repo.branch) {
             model.loadBranchCommits(repo, selectedBranch)
@@ -446,6 +475,9 @@ private fun RepositoryDetail(
             }
         }
         item { Text("Branches", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
+        if (ws.branches[repo.id] == null) {
+            item { Muted(if (state.loadingRepoDetailsId == repo.id) "Loading repository branches…" else "Branches not loaded yet. Refresh to retry.") }
+        }
         items(ws.branches[repo.id].orEmpty(), key = { it.name }) { branch ->
             BranchRow(branch, selected = selectedBranch == branch.name) { selectedBranch = branch.name }
         }
