@@ -36,6 +36,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -367,6 +369,8 @@ private fun RepositoryDetail(
     val state by model.state.collectAsState()
     var selectedBranch by remember(repo.id) { mutableStateOf(repo.branch) }
     var selectedCommit by remember(repo.id, selectedBranch) { mutableStateOf<CommitItem?>(null) }
+    var createBranchFrom by remember(repo.id) { mutableStateOf<CommitItem?>(null) }
+    var newBranchName by remember(repo.id) { mutableStateOf("") }
     val branchKey = GitPilotViewModel.branchKey(repo, selectedBranch)
     val history = if (selectedBranch == repo.branch) ws.commits[repo.id]
         else state.branchCommits[branchKey]
@@ -433,9 +437,43 @@ private fun RepositoryDetail(
                         }
                         if (patches.size > 15) Muted("Showing the first 15 files.")
                     }
+                    if (state.authenticatedAs != null) {
+                        OutlinedButton(onClick = { createBranchFrom = commit }) {
+                            Text("Create branch from this commit")
+                        }
+                    }
                 }
             }
         }
+    }
+    if (createBranchFrom != null) {
+        val source = createBranchFrom ?: return
+        AlertDialog(
+            onDismissRequest = { createBranchFrom = null },
+            title = { Text("Create a GitHub branch") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Muted("Starting from " + source.fullSha.take(12) + " in " + repo.owner + "/" + repo.name)
+                    OutlinedTextField(
+                        value = newBranchName, onValueChange = { newBranchName = it },
+                        label = { Text("New branch name") }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Muted("This creates a remote branch. It will not modify the selected commit.")
+                }
+            },
+            confirmButton = {
+                Button(enabled = newBranchName.isNotBlank(),
+                    onClick = {
+                        model.createBranch(repo, source, newBranchName)
+                        createBranchFrom = null
+                        newBranchName = ""
+                    }) { Text("Create on GitHub") }
+            },
+            dismissButton = {
+                TextButton(onClick = { createBranchFrom = null }) { Text("Cancel") }
+            }
+        )
     }
 }
 

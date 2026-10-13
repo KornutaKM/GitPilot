@@ -186,6 +186,22 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun createBranch(repo: RepositoryItem, commit: CommitItem, proposedName: String) {
+        val branchName = proposedName.trim()
+        val valid = branchName.matches(Regex("[A-Za-z0-9._/-]{1,120}")) &&
+            !branchName.startsWith(".") && !branchName.startsWith("/") &&
+            !branchName.endsWith(".") && !branchName.endsWith("/") &&
+            !branchName.endsWith(".lock") && !branchName.contains("..") &&
+            !branchName.contains("//") && !branchName.contains("/.")
+        if (!valid) {
+            mutable.update { it.copy(error = "Invalid Git branch name. Use letters, digits, dots, dashes, underscores and slashes.") }
+            return
+        }
+        runAuthorized("Created branch " + branchName + " on GitHub") { token ->
+            service.createBranch(repo, commit.fullSha, branchName, token)
+        }
+    }
+
     fun review(pr: PullRequestItem, event: String, message: String) {
         runAuthorized("Review submitted to GitHub") { token ->
             if (event == "REQUEST_CHANGES" && message.isBlank()) throw IOException("Explain the requested changes.")

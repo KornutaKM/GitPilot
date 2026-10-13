@@ -278,6 +278,11 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
         http.put(path, token, JSONObject().put("sha", pr.headSha).put("merge_method", "squash"))
     }
 
+    suspend fun createBranch(repo: RepositoryItem, sha: String, branch: String, token: String) {
+        val path = "/repos/" + enc(repo.owner) + "/" + enc(repo.name) + "/git/refs"
+        http.post(path, token, JSONObject().put("ref", "refs/heads/" + branch).put("sha", sha))
+    }
+
     suspend fun rerunFailed(run: WorkflowRunItem, token: String) {
         val path = "/repos/" + enc(run.owner) + "/" + enc(run.repo) +
             "/actions/runs/" + run.id + "/rerun-failed-jobs"

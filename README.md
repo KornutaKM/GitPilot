@@ -7,7 +7,7 @@ Native GitHub control center built with Kotlin, Jetpack Compose and Material 3.
 Live public repository browsing now works without a GitHub login. GitHub App Device Flow sign-in and remote operations (reviews, squash merge and retry failed workflow jobs) are implemented; signed-in features require a GitHub App Client ID and installation permissions.
 
 - Overview: recent repositories, pull requests and GitHub Actions from live GitHub REST endpoints.
-- Repositories: default-branch and selected-branch history, with on-demand actual commit diff.
+- Repositories: default-branch and selected-branch history, actual commit patches and confirmed creation of a remote branch from a chosen commit.
 - PRs: real changed-file patches loaded on demand, optional review/comment and merge confirmation.
 - Actions: real workflow runs and on-demand job lists, full-log links, rerun failed jobs with confirmation.
 - Account: choose public GitHub username, connect/disconnect GitHub App user authorization.
@@ -27,7 +27,7 @@ The repo currently has Gradle wrapper properties but not the binary wrapper JAR 
 GitPilot uses GitHub App OAuth Device Flow. This protocol uses a public client ID rather than a client secret in the Android app.
 
 1. Register a GitHub App in GitHub Developer Settings. Enable Device Flow in its app settings.
-2. Select the minimum required repository permissions: Metadata read, Contents read, Pull requests read/write if review and merge are desired, and Actions read/write for reruns.
+2. Select the minimum required repository permissions: Metadata read, Contents read/write to create branches, Pull requests read/write if review and merge are desired, and Actions read/write for reruns.
 3. Install the GitHub App on the selected repositories.
 4. Set the public client ID as Gradle property gitpilot.githubClientId=YOUR_CLIENT_ID in your user-level Gradle properties, or pass -Pgitpilot.githubClientId=YOUR_CLIENT_ID when building.
 5. For APKs made by GitHub Actions, set repository Actions variable GITPILOT_GITHUB_CLIENT_ID.
@@ -40,8 +40,8 @@ In public mode, remote mutations are disabled. When signed in, every review, mer
 ## Alpha limitations
 
 - Up to 12 public or 20 authenticated repositories in the list, with 4 public or 8 authenticated repositories queried for related PRs and Actions.
-- Branch-specific commits are loaded when selecting a branch; individual commit file patches load on tap.
-- PR check status is Unknown rather than assumed.
+- Branch-specific commits load when selecting a branch; individual commit patches load on tap. Creating a remote branch requires authorization and confirmation.
+- PR check status comes from GitHub Checks for a bounded subset of PRs; it remains Unknown if no check data is available.
 - On-demand PR file patches and workflow job lists. Full logs open in GitHub.
 - No push notifications, offline persistent cache, advanced API pagination, rebase or code editor.
 - Anonymous API use is rate limited by GitHub; refresh is manual.
