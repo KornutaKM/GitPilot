@@ -16,11 +16,11 @@ Live public repository browsing now works without a GitHub login. GitHub App Dev
 ## Run
 
 1. Open the repository in Android Studio with JDK 17 and Android SDK Platform 36.
-2. Build using Gradle 8.13: gradle :app:assembleDebug or gradle testDebugUnitTest.
+2. Build with the verified Gradle 8.13 wrapper: ./gradlew :app:assembleDebug or ./gradlew testDebugUnitTest (Windows: gradlew.bat).
 3. Run on Android 8.0 (API 26) or newer.
 4. Download the debug APK from GitHub Actions -> Android CI -> Artifacts -> GitPilot-debug.
 
-The repo currently has Gradle wrapper properties but not the binary wrapper JAR or launcher scripts; use installed Gradle 8.13 or the CI runner.
+Gradle Wrapper launchers and JAR are included, sourced from the official Gradle v8.13.0 tag. No manually installed Gradle version is required.
 
 ## GitHub App authorization (optional)
 

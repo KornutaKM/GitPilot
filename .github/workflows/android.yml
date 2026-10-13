@@ -22,10 +22,8 @@ jobs:
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" --install 'platforms;android-36' 'build-tools;35.0.0'
       - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.13'
       - name: Unit tests and debug APK
-        run: gradle --no-daemon testDebugUnitTest assembleDebug -Pgitpilot.githubClientId="${{ vars.GITPILOT_GITHUB_CLIENT_ID }}"
+        run: ./gradlew --no-daemon testDebugUnitTest assembleDebug -Pgitpilot.githubClientId="${{ vars.GITPILOT_GITHUB_CLIENT_ID }}"
       - uses: actions/upload-artifact@v4
         if: success()
         with:
