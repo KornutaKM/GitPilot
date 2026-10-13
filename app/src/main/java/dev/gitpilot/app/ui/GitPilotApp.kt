@@ -226,16 +226,6 @@ fun GitPilotApp(model: GitPilotViewModel = viewModel()) {
 }
 
 @Composable
-private fun DemoTag() {
-    Text(
-        "DEMO", color = MaterialTheme.colorScheme.primary,
-        fontSize = 11.sp, fontWeight = FontWeight.Bold,
-        modifier = Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.13f), RoundedCornerShape(50))
-            .padding(horizontal = 11.dp, vertical = 6.dp)
-    )
-}
-
-@Composable
 private fun Heading(title: String, description: String? = null) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -334,6 +324,7 @@ private fun Dashboard(
         item { Text("Needs attention", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
         items(failed) { run -> WorkflowRow(run, onClick = { onWorkflow(run.id) }) }
         items(reviews) { pr -> PullRequestRow(pr, onClick = { onPr(GitPilotViewModel.diffKey(pr)) }) }
+        if (failed.isEmpty() && reviews.isEmpty()) item { Muted("No urgent failures or requested reviews in monitored projects.") }
         item { Text("Pinned and recent repositories", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
         items(ws.repositories.take(6)) { repo -> RepositoryRow(repo, onClick = { onRepo(repo.id) }) }
         if (ws.repositories.isEmpty()) item { Muted("No repositories loaded. Open Account to browse a public GitHub profile.") }
@@ -535,7 +526,12 @@ private fun PullRequestRow(pr: PullRequestItem, onClick: () -> Unit) {
 @Composable
 private fun PullRequestsScreen(prs: List<PullRequestItem>, onPr: (String) -> Unit) {
     var needsReviewOnly by rememberSaveable { mutableStateOf(false) }
-    val visible = prs.filter { !needsReviewOnly || it.requiresReview }
+    var selectedRepo by rememberSaveable { mutableStateOf<String?>(null) }
+    val repositoryNames = prs.map { it.owner + "/" + it.repo }.distinct().sorted()
+    val visible = prs.filter { pr ->
+        (!needsReviewOnly || pr.requiresReview) &&
+            (selectedRepo == null || pr.owner + "/" + pr.repo == selectedRepo)
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
@@ -548,49 +544,20 @@ private fun PullRequestsScreen(prs: List<PullRequestItem>, onPr: (String) -> Uni
                 FilterChip(selected = !needsReviewOnly, onClick = { needsReviewOnly = false }, label = { Text("All PRs") })
             }
         }
+        item {
+            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = selectedRepo == null, onClick = { selectedRepo = null },
+                    label = { Text("All projects") })
+                repositoryNames.forEach { fullName ->
+                    FilterChip(selected = selectedRepo == fullName,
+                        onClick = { selectedRepo = fullName },
+                        label = { Text(fullName) })
+                }
+            }
+        }
         items(visible, key = { GitPilotViewModel.diffKey(it) }) { pr -> PullRequestRow(pr) { onPr(GitPilotViewModel.diffKey(pr)) } }
         if (visible.isEmpty()) item { Muted("No pull requests in this filter.") }
-    }
-}
-
-@Composable
-private fun PullRequestDetail(pr: PullRequestItem) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item { Heading(pr.title, "${pr.repo} / #${pr.number}") }
-        item {
-            Panel {
-                Muted("BRANCHES")
-                Text("${pr.source} → ${pr.target}", fontWeight = FontWeight.Medium)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Muted("${pr.changes} files · +${pr.additions} / −${pr.deletions}", Modifier.weight(1f))
-                    Status(pr.check)
-                }
-                Muted("Opened by @${pr.author}")
-            }
-        }
-        item { Text("Changes · demo diff", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium) }
-        item {
-            Panel {
-                Muted("src/auth/TokenRepository.kt")
-                Text(
-                    "@@ -12,3 +12,4 @@\n- val token = cache.read()\n+ val token = cache.readValid()\n+ if (token == null) refresh()",
-                    fontFamily = FontFamily.Monospace, fontSize = 12.sp,
-                    lineHeight = 19.sp,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
-        item {
-            Panel {
-                Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Muted("Preview only. Approve, request changes and merge require authenticated GitHub access and permission checks.")
-                Button(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) { Text("Connect GitHub to review") }
-            }
-        }
     }
 }
 
@@ -615,7 +582,12 @@ private fun ActionsScreen(
     onLaunch: () -> Unit, signedIn: Boolean
 ) {
     var failedOnly by rememberSaveable { mutableStateOf(false) }
-    val visible = workflows.filter { !failedOnly || it.check == CheckStatus.FAILED }
+    var selectedRepo by rememberSaveable { mutableStateOf<String?>(null) }
+    val repositoryNames = workflows.map { it.owner + "/" + it.repo }.distinct().sorted()
+    val visible = workflows.filter { run ->
+        (!failedOnly || run.check == CheckStatus.FAILED) &&
+            (selectedRepo == null || run.owner + "/" + run.repo == selectedRepo)
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
@@ -633,47 +605,19 @@ private fun ActionsScreen(
                 FilterChip(selected = failedOnly, onClick = { failedOnly = true }, label = { Text("Failures") })
             }
         }
+        item {
+            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = selectedRepo == null, onClick = { selectedRepo = null },
+                    label = { Text("All projects") })
+                repositoryNames.forEach { fullName ->
+                    FilterChip(selected = selectedRepo == fullName,
+                        onClick = { selectedRepo = fullName },
+                        label = { Text(fullName) })
+                }
+            }
+        }
         items(visible, key = { it.id }) { run -> WorkflowRow(run) { onWorkflow(run.id) } }
     }
 }
 
-@Composable
-private fun WorkflowDetail(run: WorkflowRunItem) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item { Heading(run.name, "${run.repo} · ${run.branch} · #${run.id}") }
-        item {
-            Panel {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Workflow run", modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
-                    Status(run.check)
-                }
-                Muted("Last updated ${run.age}")
-            }
-        }
-        item { Text("Jobs", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
-        items(run.steps) { step ->
-            Panel {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(step.name, modifier = Modifier.weight(1f))
-                    Status(step.status)
-                }
-            }
-        }
-        item { Text("Log excerpt · demo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
-        item {
-            Panel {
-                Text(run.logExcerpt, fontFamily = FontFamily.Monospace, fontSize = 12.sp,
-                    lineHeight = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        item {
-            Muted("Read-only preview. Rerun becomes available after secure GitHub authorization.")
-            Spacer(Modifier.height(8.dp))
-            Button(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) { Text("Rerun failed jobs") }
-        }
-    }
-}

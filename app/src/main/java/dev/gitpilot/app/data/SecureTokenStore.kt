@@ -75,7 +75,7 @@ class SecureTokenStore(context: Context) {
                 val json = JSONObject(data)
                 require(json.optInt("version") == 2)
                 OAuthCredentials(json.getString("access"), json.getLong("access_expires_at"),
-                    json.optString("refresh").ifBlank { null }, json.optLong("refresh_expires_at"))
+                    json.optString("refresh").takeIf { it.isNotBlank() }, json.optLong("refresh_expires_at"))
             } else {
                 OAuthCredentials(data, prefs.getLong("expires_at", 0L), null, 0L)
             }

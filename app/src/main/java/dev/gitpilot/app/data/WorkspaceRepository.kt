@@ -82,6 +82,17 @@ fun validGitRefName(value: String): Boolean {
         !value.contains("..") && !value.contains("/.")
 }
 
+fun missingPinnedRepositories(
+    recent: List<RepositoryItem>, pinned: Set<String>, username: String,
+    signedIn: Boolean, max: Int = 12
+): List<String> {
+    val recentKeys = recent.map { (it.owner + "/" + it.name).lowercase() }.toSet()
+    return pinned.asSequence().filter { key ->
+        key !in recentKeys && key.count { ch -> ch == '/' } == 1 &&
+            (signedIn || key.substringBefore('/').equals(username, ignoreCase = true))
+    }.sorted().take(max).toList()
+}
+
 fun prioritizeRepositories(repositories: List<RepositoryItem>): List<RepositoryItem> =
     repositories.sortedWith(compareByDescending { it.starred })
 

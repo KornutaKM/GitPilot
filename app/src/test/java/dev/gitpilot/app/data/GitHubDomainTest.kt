@@ -47,6 +47,23 @@ class GitHubDomainTest {
         assertFalse(validGitRefName(""))
     }
 
+    @Test fun anonymousPinnedDiscoveryNeverLeaksOtherProfiles() {
+        val item = RepositoryItem(9, "recent", "alice", "", "Kotlin", "main", "", false)
+        val missing = missingPinnedRepositories(
+            listOf(item), setOf("alice/recent", "alice/older", "bob/private"),
+            "alice", signedIn = false
+        )
+        assertEquals(listOf("alice/older"), missing)
+    }
+
+    @Test fun signedInPinnedDiscoveryIsBoundedAndSorted() {
+        val result = missingPinnedRepositories(
+            emptyList(), setOf("zeta/repo", "alpha/repo", "beta/repo"),
+            "alice", signedIn = true, max = 2
+        )
+        assertEquals(listOf("alpha/repo", "beta/repo"), result)
+    }
+
     @Test fun unknownDoesNotMeanSuccessful() {
         assertNotEquals(CheckStatus.SUCCESS, CheckStatus.UNKNOWN)
     }

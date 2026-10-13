@@ -226,15 +226,33 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
         }
         val repos = JSONArray(http.get(route, token))
         val entries = (0 until repos.length()).map { repos.getJSONObject(it) }
-        val all = prioritizeRepositories(entries.map { json ->
+        val warnings = mutableListOf<String>()
+        val recent = entries.map { json ->
             val item = repositoryFromJson(json)
             item.copy(starred = (item.owner + "/" + item.name).lowercase() in pinned)
-        })
+        }
+        // Pinning a project must not lose it just because newer repositories
+        // push it beyond the first API page. Fetch missing pins individually.
+        val missingPinned = missingPinnedRepositories(recent, pinned, username, signedIn)
+        val pinnedExtras = mutableListOf<RepositoryItem>()
+        for (key in missingPinned) {
+            val owner = key.substringBefore('/')
+            val name = key.substringAfter('/')
+            try {
+                val response = JSONObject(http.get("/repos/" + enc(owner) + "/" + enc(name), token))
+                pinnedExtras += repositoryFromJson(response).copy(starred = true)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                if (e is GitHubApiException && (e.rateLimited || e.statusCode == 401)) throw e
+                warnings += "Pinned " + key + ": " + e.message.orEmpty()
+            }
+        }
+        val all = prioritizeRepositories((recent + pinnedExtras).distinctBy { it.id })
         val branches = mutableMapOf<Long, List<BranchItem>>()
         val commits = mutableMapOf<Long, List<CommitItem>>()
         val prs = mutableListOf<PullRequestItem>()
         val runs = mutableListOf<WorkflowRunItem>()
-        val warnings = mutableListOf<String>()
+        
         // Limit requests in anonymous mode (60 requests/hour shared by IP).
         val monitored = all.take(if (signedIn) 8 else 4)
         // At most three repositories are fetched simultaneously to keep the mobile
