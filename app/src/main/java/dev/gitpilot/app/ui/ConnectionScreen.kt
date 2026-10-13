@@ -25,6 +25,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -42,6 +44,7 @@ fun ConnectionScreen(
 ) {
     var username by remember(state.publicUsername) { mutableStateOf(state.publicUsername) }
     val uriHandler = LocalUriHandler.current
+    val clipboard = LocalClipboardManager.current
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -94,6 +97,9 @@ fun ConnectionScreen(
                                     style = MaterialTheme.typography.headlineMedium,
                                     color = MaterialTheme.colorScheme.primary)
                             }
+                            OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = {
+                                clipboard.setText(AnnotatedString(state.deviceCode.userCode))
+                            }) { Text("Copy device code") }
                             Button(modifier = Modifier.fillMaxWidth(), onClick = {
                                 uriHandler.openUri(state.deviceCode.verificationUri)
                             }) { Text("Open GitHub authorization") }

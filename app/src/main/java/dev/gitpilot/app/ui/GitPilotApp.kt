@@ -204,7 +204,8 @@ fun GitPilotApp(model: GitPilotViewModel = viewModel()) {
                     MainTab.HOME -> Dashboard(workspace,
                         onRepo = { detail = Details.Repository(it) },
                         onPr = { detail = Details.PullRequest(it) },
-                        onWorkflow = { detail = Details.Workflow(it) })
+                        onWorkflow = { detail = Details.Workflow(it) },
+                        onRetry = model::refresh, isLoading = state.loading)
                     MainTab.REPOS -> RepositoriesScreen(workspace.repositories) { detail = Details.Repository(it) }
                     MainTab.PRS -> PullRequestsScreen(workspace.pullRequests) { detail = Details.PullRequest(it) }
                     MainTab.ACTIONS -> ActionsScreen(workspace.workflows,
@@ -304,7 +305,9 @@ private fun Dashboard(
     ws: Workspace,
     onRepo: (Long) -> Unit,
     onPr: (String) -> Unit,
-    onWorkflow: (Long) -> Unit
+    onWorkflow: (Long) -> Unit,
+    onRetry: () -> Unit,
+    isLoading: Boolean
 ) {
     val failed = ws.workflows.filter { it.check == CheckStatus.FAILED }
     val reviews = ws.pullRequests.filter { it.requiresReview }
@@ -314,6 +317,15 @@ private fun Dashboard(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item { Heading("Your workspace", "All the important changes in one place") }
+        if (ws.repositories.isEmpty() && !isLoading) {
+            item {
+                Panel {
+                    Text("No GitHub data loaded", fontWeight = FontWeight.SemiBold)
+                    Muted("The account may have no accessible repositories or the last request may have failed. Choose another account or retry.")
+                    Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) { Text("Retry loading") }
+                }
+            }
+        }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Stat(ws.repositories.size.toString().padStart(2, '0'), "Repositories", Modifier.weight(1f))
@@ -368,7 +380,9 @@ private fun RepositoriesScreen(repos: List<RepositoryItem>, onRepo: (Long) -> Un
             )
         }
         items(visible, key = { it.id }) { repo -> RepositoryRow(repo) { onRepo(repo.id) } }
-        if (visible.isEmpty()) item { Muted("No repositories match your search.") }
+        if (visible.isEmpty()) item {
+            Muted(if (repos.isEmpty()) "No repositories loaded. Open Account or retry from the top bar." else "No repositories match your search.")
+        }
     }
 }
 
@@ -618,6 +632,7 @@ private fun ActionsScreen(
             }
         }
         items(visible, key = { it.id }) { run -> WorkflowRow(run) { onWorkflow(run.id) } }
+        if (visible.isEmpty()) item { Muted("No workflow runs match this selection.") }
     }
 }
 

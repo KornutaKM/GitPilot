@@ -63,3 +63,7 @@ Workspace requests for recent repositories are performed with a concurrency limi
 ## Logout and session isolation
 
 Signing out clears the in-memory workspace, private diffs, cached jobs, workflow definitions and encrypted credentials immediately, even while offline. In-flight detail requests use a session generation guard so they cannot reintroduce data from a previous account. Destructive operations are serialized to prevent duplicate submissions from repeated taps. Actual remote mutations still require user confirmation and GitHub permissions.
+
+## UX improvements
+
+The GitHub device authorization code can be copied directly to the Android clipboard before opening the browser. A failed or empty first workspace load now offers an explicit retry action; empty repository and Actions filters no longer silently show blank screens.
