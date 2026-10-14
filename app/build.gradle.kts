@@ -11,7 +11,7 @@ android {
     defaultConfig {
         applicationId = "dev.gitpilot.app"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 11
         versionName = "1.2.0-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
