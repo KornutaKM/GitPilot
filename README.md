@@ -2,7 +2,7 @@
 
 Native GitHub control center built with Kotlin, Jetpack Compose and Material 3.
 
-## Version 1.2.0-alpha
+## Version 1.3.0-alpha
 
 Live public repository browsing now works without a GitHub login. GitHub App Device Flow sign-in and remote operations (reviews, squash merge and retry failed workflow jobs) are implemented; signed-in features require a GitHub App Client ID and installation permissions.
 
@@ -51,6 +51,41 @@ In public mode, remote mutations are disabled. When signed in, comments, reviews
 - app/src/main/java/dev/gitpilot/app/data: models, REST integration, encrypted session and ViewModel.
 - app/src/main/java/dev/gitpilot/app/ui: Compose screens and account / remote action flows.
 - .github/workflows/android.yml: unit tests, assemble debug APK and publish artifact.
+
+
+## Aurora visual update (1.3 alpha)
+
+The native Android UI now uses GitPilot Aurora design tokens in both light and dark mode:
+lavender focus accents, refined semantic surfaces, 22dp cards, a prominent attention dashboard
+and a tighter typography scale. The GitHub API behavior is unchanged by this visual redesign.
+The Gradle target SDK is 36 (compile SDK 36). CI builds and lints the debug application.
+
+## Publisher-signed Google Play bundle
+
+Debug APKs from GitHub Actions are for testing only, not a Play Store release.
+Create a **release upload keystore** outside this repository and keep passwords in a
+publisher-managed secrets vault. On a secure machine with JDK 17 and Android SDK 36:
+
+```bash
+export GITPILOT_SIGNING_STORE_FILE="/secure/location/gitpilot-upload.jks"
+export GITPILOT_SIGNING_STORE_PASSWORD="(read from your secret manager)"
+export GITPILOT_SIGNING_KEY_ALIAS="gitpilot-upload"
+export GITPILOT_SIGNING_KEY_PASSWORD="(read from your secret manager)"
+bash scripts/build_play_bundle.sh
+```
+
+The script runs unit tests and lint, builds the AAB and verifies that it has a
+valid JAR upload signature. Do not place keystores, passwords or GitHub access
+tokens in source control. With no signing environment variables, the Gradle
+release build remains unsigned for local compilation; with only some variables
+provided, configuration fails closed.
+
+Signing alone does not make a store-ready app. Before Google Play internal testing,
+the publisher must choose and register the final application ID, configure the
+GitHub App public client ID and permissions, test Device Flow/login/logout and
+GitHub writes on a disposable repo, and complete privacy and policy disclosures.
+The iOS project in the separate RC3 source archive remains unbuilt with Xcode;
+successful Android CI does not validate iOS.
 
 ## License
 
