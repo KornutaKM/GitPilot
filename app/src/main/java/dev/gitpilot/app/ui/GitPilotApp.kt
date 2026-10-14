@@ -1,0 +1,808 @@
+package dev.gitpilot.app.ui
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AccountTree
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.gitpilot.app.data.BranchItem
+import dev.gitpilot.app.data.CheckStatus
+import dev.gitpilot.app.data.CommitItem
+import dev.gitpilot.app.data.GitPilotViewModel
+import dev.gitpilot.app.data.PullRequestItem
+import dev.gitpilot.app.data.RepositoryItem
+import dev.gitpilot.app.data.WorkflowRunItem
+import dev.gitpilot.app.data.Workspace
+
+enum class MainTab(val label: String) { HOME("Home"), REPOS("Repos"), PRS("PRs"), ACTIONS("Actions") }
+
+private sealed interface Details {
+    data class Repository(val id: Long) : Details
+    data class PullRequest(val key: String) : Details
+    data class Workflow(val id: Long) : Details
+}
+
+@Composable
+fun GitPilotApp(model: GitPilotViewModel = viewModel()) {
+    var tab by rememberSaveable { mutableStateOf(MainTab.HOME) }
+    var detail by remember { mutableStateOf<Details?>(null) }
+    var connectionScreen by rememberSaveable { mutableStateOf(false) }
+    var workflowLauncherOpen by remember { mutableStateOf(false) }
+    val state by model.state.collectAsState()
+    val workspace = state.workspace
+    val snackbars = remember { SnackbarHostState() }
+    LaunchedEffect(state.error, state.message) {
+        val notice = state.error ?: state.message
+        if (notice != null) {
+            snackbars.showSnackbar(notice)
+            model.dismissError()
+            model.consumeMessage()
+        }
+    }
+    BackHandler(enabled = detail != null || connectionScreen || workflowLauncherOpen) {
+        when {
+            workflowLauncherOpen -> workflowLauncherOpen = false
+            detail != null -> detail = null
+            else -> connectionScreen = false
+        }
+    }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbars) },
+        topBar = {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 24.dp, bottom = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (detail != null) {
+                        IconButton(onClick = { detail = null }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("GitPilot", fontSize = 25.sp, letterSpacing = (-0.7).sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (detail != null) "Workspace / Details" else if (state.authenticatedAs != null) "Connected: @" + state.authenticatedAs else "Public: @" + state.publicUsername,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                    IconButton(onClick = { model.refresh() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh live data")
+                    }
+                    TextButton(onClick = { detail = null; connectionScreen = true }) {
+                        Text("Account")
+                    }
+                }
+                if (state.loading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.30f))
+            }
+        },
+        bottomBar = {
+            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                MainTab.entries.forEach { item ->
+                    NavigationBarItem(
+                        selected = tab == item,
+                        onClick = { tab = item; detail = null; connectionScreen = false },
+                        label = { Text(item.label) },
+                        icon = {
+                            Icon(
+                                when (item) {
+                                    MainTab.HOME -> Icons.Default.Home
+                                    MainTab.REPOS -> Icons.Default.Folder
+                                    MainTab.PRS -> Icons.Default.Code
+                                    MainTab.ACTIONS -> Icons.Default.PlayArrow
+                                }, contentDescription = item.label
+                            )
+                        }
+                    )
+                }
+            }
+        }
+    ) { inset ->
+        Box(Modifier.fillMaxSize().padding(inset)) {
+            if (connectionScreen) {
+                ConnectionScreen(
+                    state = state, signInAvailable = model.canSignIn,
+                    onUsernameChange = model::setPublicUsername,
+                    onSignIn = model::signIn, onCancel = model::cancelSignIn,
+                    onSignOut = model::signOut, onRefresh = model::refresh
+                )
+            } else when (val active = detail) {
+                is Details.Repository -> workspace.repositories.find { it.id == active.id }?.let { repo ->
+                    RepositoryDetail(repo, workspace, model, onBack = { detail = null })
+                }
+                is Details.PullRequest -> workspace.pullRequests.find { GitPilotViewModel.diffKey(it) == active.key }?.let { pr ->
+                    LaunchedEffect(active.key, workspace) {
+                        model.loadPullFiles(pr)
+                        model.loadPullDiscussion(pr)
+                    }
+                    LivePullRequestDetail(
+                        pr, state.diffs[active.key], state.detailLoading,
+                        authenticated = state.authenticatedAs != null,
+                        busy = state.loading,
+                        discussion = state.discussion[active.key],
+                        discussionLoading = state.loadingDiscussionKey == active.key,
+                        onLoadDiscussion = { model.loadPullDiscussion(pr, force = true) },
+                        onPostComment = { model.comment(pr, it) },
+                        onReview = { event, message -> model.review(pr, event, message) },
+                        onMerge = { model.merge(pr) }
+                    )
+                }
+                is Details.Workflow -> workspace.workflows.find { it.id == active.id }?.let { run ->
+                    LaunchedEffect(active.id) { model.loadWorkflowJobs(run) }
+                    LiveWorkflowDetail(
+                        run, state.jobs[run.id], state.detailLoading,
+                        authenticated = state.authenticatedAs != null,
+                        jobLogs = state.jobLogs,
+                        loadingJobId = state.loadingJobId,
+                        onOpenJobLog = { job -> model.loadJobLog(run, job) },
+                        onRerunFailed = { model.rerunFailed(run) },
+                        onCancelRun = { model.cancelWorkflowRun(run) },
+                        busy = state.loading
+                    )
+                }
+                null -> when (tab) {
+                    MainTab.HOME -> Dashboard(workspace,
+                        onRepo = { detail = Details.Repository(it) },
+                        onPr = { detail = Details.PullRequest(it) },
+                        onWorkflow = { detail = Details.Workflow(it) },
+                        onRetry = model::refresh, isLoading = state.loading)
+                    MainTab.REPOS -> RepositoriesScreen(
+                        repos = workspace.repositories,
+                        hasMore = state.hasMoreRepositories,
+                        loadingMore = state.loadingMoreRepositories,
+                        onLoadMore = model::loadMoreRepositories,
+                        onRepo = { detail = Details.Repository(it) }
+                    )
+                    MainTab.PRS -> PullRequestsScreen(workspace.pullRequests) { detail = Details.PullRequest(it) }
+                    MainTab.ACTIONS -> ActionsScreen(workspace.workflows,
+                        onWorkflow = { detail = Details.Workflow(it) },
+                        onLaunch = { workflowLauncherOpen = true },
+                        signedIn = state.authenticatedAs != null)
+                }
+            }
+            if (workflowLauncherOpen) {
+                WorkflowLauncher(
+                    state = state,
+                    onLoad = model::loadWorkflowDefinitions,
+                    onDispatch = model::dispatchWorkflow,
+                    onDismiss = { workflowLauncherOpen = false }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun Heading(title: String, description: String? = null) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        if (description != null) Muted(description)
+    }
+}
+
+@Composable
+private fun Muted(text: String, modifier: Modifier = Modifier) {
+    Text(text, modifier = modifier, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.bodySmall)
+}
+
+@Composable
+private fun Panel(onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp), content = content)
+    }
+}
+
+@Composable
+private fun Status(status: CheckStatus) {
+    val color = when (status) {
+        CheckStatus.SUCCESS -> Color(0xFF39C68A)
+        CheckStatus.FAILED -> Color(0xFFEE7180)
+        CheckStatus.RUNNING -> Color(0xFF8CA7FF)
+        CheckStatus.PENDING -> Color(0xFFE6BC6C)
+        CheckStatus.UNKNOWN -> Color(0xFF8B919E)
+    }
+    val label = when (status) {
+        CheckStatus.SUCCESS -> "Passed"
+        CheckStatus.FAILED -> "Failed"
+        CheckStatus.RUNNING -> "Running"
+        CheckStatus.PENDING -> "Pending"
+        CheckStatus.UNKNOWN -> "Unknown"
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.background(color.copy(alpha = 0.12f), RoundedCornerShape(50))
+            .padding(horizontal = 8.dp, vertical = 5.dp)
+    ) {
+        Icon(
+            when (status) {
+                CheckStatus.SUCCESS -> Icons.Default.CheckCircle
+                CheckStatus.FAILED -> Icons.Default.Error
+                CheckStatus.RUNNING -> Icons.Default.Refresh
+                CheckStatus.PENDING -> Icons.Default.Schedule
+                CheckStatus.UNKNOWN -> Icons.Default.Info
+            }, contentDescription = null, tint = color, modifier = Modifier.size(14.dp)
+        )
+        Text(label, color = color, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@Composable
+private fun Stat(number: String, label: String, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(19.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(Modifier.padding(vertical = 17.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(number, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Muted(label)
+        }
+    }
+}
+
+@Composable
+private fun Dashboard(
+    ws: Workspace,
+    onRepo: (Long) -> Unit,
+    onPr: (String) -> Unit,
+    onWorkflow: (Long) -> Unit,
+    onRetry: () -> Unit,
+    isLoading: Boolean
+) {
+    val failed = ws.workflows.filter { it.check == CheckStatus.FAILED }
+    val reviews = ws.pullRequests.filter { it.requiresReview }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item {
+            Box(
+                Modifier.fillMaxWidth()
+                    .background(
+                        brush = Brush.linearGradient(
+                            listOf(Color(0xFF4B3D82), Color(0xFF222A47), Color(0xFF182436))
+                        ),
+                        shape = RoundedCornerShape(26.dp)
+                    ).padding(22.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "GITHUB CONTROL CENTER", color = Color(0xFFDBD3FF),
+                        style = MaterialTheme.typography.labelSmall,
+                        letterSpacing = 1.4.sp, fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Your code.\nIn focus.", color = Color.White,
+                        fontSize = 31.sp, lineHeight = 35.sp,
+                        fontWeight = FontWeight.SemiBold, letterSpacing = (-0.7).sp
+                    )
+                    Text(
+                        "Reviews, pipelines and repositories — one clear view.",
+                        color = Color(0xFFE0E3F5), style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
+        if (ws.repositories.isEmpty() && !isLoading) {
+            item {
+                Panel {
+                    Text("No GitHub data loaded", fontWeight = FontWeight.SemiBold)
+                    Muted("The account may have no accessible repositories or the last request may have failed. Choose another account or retry.")
+                    Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) { Text("Retry loading") }
+                }
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Stat(ws.repositories.size.toString().padStart(2, '0'), "Repositories", Modifier.weight(1f))
+                Stat(reviews.size.toString().padStart(2, '0'), "Reviews", Modifier.weight(1f))
+                Stat(failed.size.toString().padStart(2, '0'), "Failed CI", Modifier.weight(1f))
+            }
+        }
+        item { Heading("Needs attention", "Failures and reviews worth your time") }
+        items(failed) { run -> WorkflowRow(run, onClick = { onWorkflow(run.id) }) }
+        items(reviews) { pr -> PullRequestRow(pr, onClick = { onPr(GitPilotViewModel.diffKey(pr)) }) }
+        if (failed.isEmpty() && reviews.isEmpty()) item { Muted("No urgent failures or requested reviews in monitored projects.") }
+        item { Heading("Your projects", "Pinned and recently active repositories") }
+        items(ws.repositories.take(6)) { repo -> RepositoryRow(repo, onClick = { onRepo(repo.id) }) }
+        if (ws.repositories.isEmpty()) item { Muted("No repositories loaded. Open Account to browse a public GitHub profile.") }
+        item { Muted("Live GitHub data. Use the refresh button in the top bar to fetch new results.") }
+    }
+}
+
+@Composable
+private fun RepositoryRow(repo: RepositoryItem, onClick: () -> Unit) {
+    Panel(onClick) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(repo.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Muted("${repo.owner} · ${repo.language} · ${repo.branch}")
+            }
+            if (repo.starred) Icon(Icons.Default.Star, contentDescription = "Pinned", tint = Color(0xFFE3B66C), modifier = Modifier.size(17.dp))
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Muted(repo.activity)
+    }
+}
+
+@Composable
+private fun RepositoriesScreen(
+    repos: List<RepositoryItem>,
+    hasMore: Boolean,
+    loadingMore: Boolean,
+    onLoadMore: () -> Unit,
+    onRepo: (Long) -> Unit
+) {
+    var query by rememberSaveable { mutableStateOf("") }
+    val visible = repos.filter { (it.name + it.owner + it.description).contains(query, ignoreCase = true) }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item { Heading("Repositories", "Browse branches and recent commits") }
+        item {
+            OutlinedTextField(
+                value = query, onValueChange = { query = it }, singleLine = true,
+                label = { Text("Search repositories") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)
+            )
+        }
+        items(visible, key = { it.id }) { repo -> RepositoryRow(repo) { onRepo(repo.id) } }
+        if (visible.isEmpty()) item {
+            Muted(if (repos.isEmpty()) "No repositories loaded. Open Account or retry from the top bar." else "No repositories match your search.")
+        }
+        if (hasMore) {
+            item {
+                Button(
+                    enabled = !loadingMore,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onLoadMore
+                ) {
+                    Text(if (loadingMore) "Loading repositories…" else "Load more repositories")
+                }
+            }
+        }
+        if (!hasMore && repos.isNotEmpty()) item {
+            Muted("Showing loaded repositories. The dashboard monitors a limited number of projects.")
+        }
+    }
+}
+
+@Composable
+private fun RepositoryDetail(
+    repo: RepositoryItem, ws: Workspace, model: GitPilotViewModel, onBack: () -> Unit
+) {
+    val state by model.state.collectAsState()
+    var selectedBranch by remember(repo.id) { mutableStateOf(repo.branch) }
+    var selectedCommit by remember(repo.id, selectedBranch) { mutableStateOf<CommitItem?>(null) }
+    var createBranchFrom by remember(repo.id) { mutableStateOf<CommitItem?>(null) }
+    var newBranchName by remember(repo.id) { mutableStateOf("") }
+    var fileBrowserOpen by remember(repo.id) { mutableStateOf(false) }
+    var createPrDialog by remember(repo.id) { mutableStateOf(false) }
+    var prTitle by remember(repo.id) { mutableStateOf("") }
+    var prDescription by remember(repo.id) { mutableStateOf("") }
+    val branchKey = GitPilotViewModel.branchKey(repo, selectedBranch)
+    val history = if (selectedBranch == repo.branch) ws.commits[repo.id]
+        else state.branchCommits[branchKey]
+
+    LaunchedEffect(repo.id, ws) {
+        model.loadRepositoryDetails(repo)
+    }
+    LaunchedEffect(repo.id, selectedBranch) {
+        if (selectedBranch != repo.branch) {
+            model.loadBranchCommits(repo, selectedBranch)
+            model.loadBranchComparison(repo, selectedBranch)
+        }
+    }
+
+    if (fileBrowserOpen) {
+        RepositoryFilesScreen(repo = repo, branch = selectedBranch, model = model,
+            onClose = { fileBrowserOpen = false })
+        return
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item { Heading(repo.name, repo.description) }
+        item {
+            Panel {
+                Muted("DEFAULT BRANCH")
+                Text(repo.branch, fontWeight = FontWeight.SemiBold)
+                Muted(repo.owner + " · " + repo.language)
+                Button(onClick = { fileBrowserOpen = true }) {
+                    Text("Browse files · " + selectedBranch)
+                }
+                OutlinedButton(onClick = { model.togglePin(repo) }) {
+                    Text(if (repo.starred) "Unpin repository" else "Pin repository")
+                }
+            }
+        }
+        item { Text("Branches", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
+        if (ws.branches[repo.id] == null) {
+            item { Muted(if (state.loadingRepoDetailsId == repo.id) "Loading repository branches…" else "Branches not loaded yet. Refresh to retry.") }
+        }
+        items(ws.branches[repo.id].orEmpty(), key = { it.name }) { branch ->
+            BranchRow(branch, selected = selectedBranch == branch.name) { selectedBranch = branch.name }
+        }
+        if (selectedBranch != repo.branch) {
+            item {
+                val comparison = state.comparisons[branchKey]
+                Panel {
+                    Text("Compare with " + repo.branch,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold)
+                    if (comparison == null) {
+                        Muted(if (state.loadingComparisonKey == branchKey) "Comparing branches on GitHub…"
+                            else "Comparison unavailable; try another branch or refresh.")
+                    } else {
+                        Muted(comparison.aheadBy.toString() + " commits ahead · " +
+                            comparison.behindBy + " commits behind")
+                        Muted("Status: " + comparison.status)
+                        if (comparison.changedFiles.isEmpty()) {
+                            Muted("No changed files reported by GitHub.")
+                        } else {
+                            Text("Changed files (" + comparison.changedFiles.size + " shown)",
+                                fontWeight = FontWeight.Medium)
+                            comparison.changedFiles.take(10).forEach { file ->
+                                Text(file.filename,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary)
+                                DiffPatch(file.patch, maxLines = 160)
+                            }
+                            if (comparison.changedFiles.size > 10) Muted("Showing first 10 changed files.")
+                        }
+                        if (state.authenticatedAs != null) {
+                            Button(
+                                enabled = comparison.canOpenPullRequest && !state.loading,
+                                onClick = {
+                                    prTitle = ""
+                                    prDescription = ""
+                                    createPrDialog = true
+                                }
+                            ) { Text("Create pull request") }
+                        } else {
+                            Muted("Sign in to create a pull request.")
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Text("Commits · " + selectedBranch, style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold)
+        }
+        if (history == null) {
+            item {
+                Muted(if (state.branchLoading) "Loading commits from GitHub…"
+                    else "History is unavailable for this branch. Retry from the toolbar.")
+            }
+        } else if (history.isEmpty()) {
+            item { Muted("No commits returned for this branch.") }
+        }
+        items(history.orEmpty(), key = { it.fullSha }) { commit ->
+            Panel(onClick = {
+                if (selectedCommit?.fullSha == commit.fullSha) {
+                    selectedCommit = null
+                } else {
+                    selectedCommit = commit
+                    model.loadCommitFiles(repo, commit)
+                }
+            }) {
+                Text(commit.subject, fontWeight = FontWeight.Medium)
+                Muted(commit.sha + " · " + commit.author + " · " + commit.time)
+                if (selectedCommit?.fullSha == commit.fullSha) {
+                    HorizontalDivider()
+                    val patches = state.commitFiles[GitPilotViewModel.commitKey(repo, commit)]
+                    if (patches == null) {
+                        Muted(if (state.detailLoading) "Loading commit diff…" else "Diff not loaded yet.")
+                    } else if (patches.isEmpty()) {
+                        Muted("GitHub returned no diff for this commit.")
+                    } else {
+                        Text(patches.size.toString() + " changed files", fontWeight = FontWeight.SemiBold)
+                        patches.take(15).forEach { file ->
+                            Text(file.filename, style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary)
+                            DiffPatch(file.patch, maxLines = 160)
+                        }
+                        if (patches.size > 15) Muted("Showing the first 15 files.")
+                    }
+                    if (state.authenticatedAs != null) {
+                        OutlinedButton(onClick = { createBranchFrom = commit }) {
+                            Text("Create branch from this commit")
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (createBranchFrom != null) {
+        val source = createBranchFrom ?: return
+        AlertDialog(
+            onDismissRequest = { createBranchFrom = null },
+            title = { Text("Create a GitHub branch") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Muted("Starting from " + source.fullSha.take(12) + " in " + repo.owner + "/" + repo.name)
+                    OutlinedTextField(
+                        value = newBranchName, onValueChange = { newBranchName = it },
+                        label = { Text("New branch name") }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Muted("This creates a remote branch. It will not modify the selected commit.")
+                }
+            },
+            confirmButton = {
+                Button(enabled = newBranchName.isNotBlank(),
+                    onClick = {
+                        model.createBranch(repo, source, newBranchName)
+                        createBranchFrom = null
+                        newBranchName = ""
+                    }) { Text("Create on GitHub") }
+            },
+            dismissButton = {
+                TextButton(onClick = { createBranchFrom = null }) { Text("Cancel") }
+            }
+        )
+    }
+    if (createPrDialog) {
+        AlertDialog(
+            onDismissRequest = { createPrDialog = false },
+            title = { Text("Create a pull request") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Muted(repo.owner + "/" + repo.name + " · " + selectedBranch + " → " + repo.branch)
+                    OutlinedTextField(
+                        value = prTitle,
+                        onValueChange = { prTitle = it },
+                        label = { Text("Title") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = prDescription,
+                        onValueChange = { prDescription = it },
+                        label = { Text("Description (optional)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 6
+                    )
+                    Muted("This creates a real pull request on GitHub. No code is merged.")
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = prTitle.isNotBlank() && prTitle.trim().length <= 200 &&
+                        prDescription.length <= 10_000 && !state.loading,
+                    onClick = {
+                        model.createPullRequest(repo, selectedBranch, prTitle, prDescription)
+                        createPrDialog = false
+                    }
+                ) { Text("Create PR on GitHub") }
+            },
+            dismissButton = {
+                TextButton(onClick = { createPrDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+}
+
+@Composable
+private fun BranchRow(branch: BranchItem, selected: Boolean, onClick: () -> Unit) {
+    Panel(onClick) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.AccountTree, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(branch.name, fontWeight = FontWeight.Medium)
+                Muted(if (branch.isDefault) "Default branch" else if (branch.ahead < 0 || branch.behind < 0) "Available branch" else "${branch.ahead} ahead · ${branch.behind} behind")
+            }
+            if (selected) Text("Selected", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+@Composable
+private fun PullRequestRow(pr: PullRequestItem, onClick: () -> Unit) {
+    Panel(onClick) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("#${pr.number}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+            Text(pr.repo, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+            Status(pr.check)
+        }
+        Text(pr.title, fontWeight = FontWeight.SemiBold)
+        Muted(pr.source + " → " + pr.target + if (pr.changes < 0) "" else " · " + pr.changes + " files")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Muted((if (pr.additions < 0) "" else "+" + pr.additions + " / −" + pr.deletions + " · ") + "@" + pr.author, Modifier.weight(1f))
+            if (pr.requiresReview) Text("Review needed", color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+@Composable
+private fun PullRequestsScreen(prs: List<PullRequestItem>, onPr: (String) -> Unit) {
+    var needsReviewOnly by rememberSaveable { mutableStateOf(false) }
+    var selectedRepo by rememberSaveable { mutableStateOf<String?>(null) }
+    val repositoryNames = prs.map { it.owner + "/" + it.repo }.distinct().sorted()
+    val visible = prs.filter { pr ->
+        (!needsReviewOnly || pr.requiresReview) &&
+            (selectedRepo == null || pr.owner + "/" + pr.repo == selectedRepo)
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item { Heading("Pull requests", "Focus on reviews that need your attention") }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = needsReviewOnly, onClick = { needsReviewOnly = true }, label = { Text("Needs review") })
+                FilterChip(selected = !needsReviewOnly, onClick = { needsReviewOnly = false }, label = { Text("All PRs") })
+            }
+        }
+        item {
+            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = selectedRepo == null, onClick = { selectedRepo = null },
+                    label = { Text("All projects") })
+                repositoryNames.forEach { fullName ->
+                    FilterChip(selected = selectedRepo == fullName,
+                        onClick = { selectedRepo = fullName },
+                        label = { Text(fullName) })
+                }
+            }
+        }
+        items(visible, key = { GitPilotViewModel.diffKey(it) }) { pr -> PullRequestRow(pr) { onPr(GitPilotViewModel.diffKey(pr)) } }
+        if (visible.isEmpty()) item { Muted("No pull requests in this filter.") }
+    }
+}
+
+@Composable
+private fun WorkflowRow(run: WorkflowRunItem, onClick: () -> Unit) {
+    Panel(onClick) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(run.name, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Status(run.check)
+        }
+        Muted("${run.repo} · ${run.branch} · ${run.age}")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Muted((if (run.steps.isEmpty()) "Tap to inspect jobs" else run.steps.size.toString() + " jobs") + " · run #" + run.id, Modifier.weight(1f))
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun ActionsScreen(
+    workflows: List<WorkflowRunItem>, onWorkflow: (Long) -> Unit,
+    onLaunch: () -> Unit, signedIn: Boolean
+) {
+    var failedOnly by rememberSaveable { mutableStateOf(false) }
+    var selectedRepo by rememberSaveable { mutableStateOf<String?>(null) }
+    val repositoryNames = workflows.map { it.owner + "/" + it.repo }.distinct().sorted()
+    val visible = workflows.filter { run ->
+        (!failedOnly || run.check == CheckStatus.FAILED) &&
+            (selectedRepo == null || run.owner + "/" + run.repo == selectedRepo)
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item { Heading("GitHub Actions", "Inspect checks, workflow runs and failures") }
+        item {
+            Button(onClick = onLaunch, enabled = signedIn, modifier = Modifier.fillMaxWidth()) {
+                Text(if (signedIn) "Run a workflow" else "Connect GitHub to dispatch workflows")
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = !failedOnly, onClick = { failedOnly = false }, label = { Text("All runs") })
+                FilterChip(selected = failedOnly, onClick = { failedOnly = true }, label = { Text("Failures") })
+            }
+        }
+        item {
+            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = selectedRepo == null, onClick = { selectedRepo = null },
+                    label = { Text("All projects") })
+                repositoryNames.forEach { fullName ->
+                    FilterChip(selected = selectedRepo == fullName,
+                        onClick = { selectedRepo = fullName },
+                        label = { Text(fullName) })
+                }
+            }
+        }
+        items(visible, key = { it.id }) { run -> WorkflowRow(run) { onWorkflow(run.id) } }
+        if (visible.isEmpty()) item { Muted("No workflow runs match this selection.") }
+    }
+}
+
