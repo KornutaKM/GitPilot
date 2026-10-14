@@ -2,6 +2,7 @@ package dev.gitpilot.app.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.clickable
@@ -65,6 +66,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -128,7 +130,7 @@ fun GitPilotApp(model: GitPilotViewModel = viewModel()) {
                         }
                     }
                     Column(Modifier.weight(1f)) {
-                        Text("GitPilot", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        Text("GitPilot", fontSize = 25.sp, letterSpacing = (-0.7).sp, fontWeight = FontWeight.SemiBold)
                         Text(
                             if (detail != null) "Workspace / Details" else if (state.authenticatedAs != null) "Connected: @" + state.authenticatedAs else "Public: @" + state.publicUsername,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -260,7 +262,8 @@ private fun Muted(text: String, modifier: Modifier = Modifier) {
 private fun Panel(onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp), content = content)
@@ -306,10 +309,11 @@ private fun Status(status: CheckStatus) {
 private fun Stat(number: String, label: String, modifier: Modifier = Modifier) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(19.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Column(Modifier.padding(vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.padding(vertical = 17.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(number, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Muted(label)
         }
@@ -332,7 +336,34 @@ private fun Dashboard(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        item { Heading("Your workspace", "All the important changes in one place") }
+        item {
+            Box(
+                Modifier.fillMaxWidth()
+                    .background(
+                        brush = Brush.linearGradient(
+                            listOf(Color(0xFF4B3D82), Color(0xFF222A47), Color(0xFF182436))
+                        ),
+                        shape = RoundedCornerShape(26.dp)
+                    ).padding(22.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "GITHUB CONTROL CENTER", color = Color(0xFFDBD3FF),
+                        style = MaterialTheme.typography.labelSmall,
+                        letterSpacing = 1.4.sp, fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Your code.\nIn focus.", color = Color.White,
+                        fontSize = 31.sp, lineHeight = 35.sp,
+                        fontWeight = FontWeight.SemiBold, letterSpacing = (-0.7).sp
+                    )
+                    Text(
+                        "Reviews, pipelines and repositories — one clear view.",
+                        color = Color(0xFFE0E3F5), style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
         if (ws.repositories.isEmpty() && !isLoading) {
             item {
                 Panel {
@@ -349,11 +380,11 @@ private fun Dashboard(
                 Stat(failed.size.toString().padStart(2, '0'), "Failed CI", Modifier.weight(1f))
             }
         }
-        item { Text("Needs attention", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
+        item { Heading("Needs attention", "Failures and reviews worth your time") }
         items(failed) { run -> WorkflowRow(run, onClick = { onWorkflow(run.id) }) }
         items(reviews) { pr -> PullRequestRow(pr, onClick = { onPr(GitPilotViewModel.diffKey(pr)) }) }
         if (failed.isEmpty() && reviews.isEmpty()) item { Muted("No urgent failures or requested reviews in monitored projects.") }
-        item { Text("Pinned and recent repositories", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
+        item { Heading("Your projects", "Pinned and recently active repositories") }
         items(ws.repositories.take(6)) { repo -> RepositoryRow(repo, onClick = { onRepo(repo.id) }) }
         if (ws.repositories.isEmpty()) item { Muted("No repositories loaded. Open Account to browse a public GitHub profile.") }
         item { Muted("Live GitHub data. Use the refresh button in the top bar to fetch new results.") }
