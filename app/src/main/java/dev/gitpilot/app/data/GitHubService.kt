@@ -19,11 +19,35 @@ class GitHubApiException(val statusCode: Int, message: String, val rateLimited: 
 
 private fun enc(part: String): String = URLEncoder.encode(part, "UTF-8").replace("+", "%20")
 
+/** Bounded response decoding protects the UI from oversized GitHub/error payloads. */
+internal fun readBoundedGitHubBody(input: java.io.InputStream, maxBytes: Int = 4_000_000): String {
+    require(maxBytes in 1..4_000_000)
+    return input.use { stream ->
+        val output = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(8192)
+        while (true) {
+            val count = stream.read(buffer)
+            if (count == -1) break
+            if (count == 0) continue
+            if (output.size() + count > maxBytes) throw IOException("GitHub response too large")
+            output.write(buffer, 0, count)
+        }
+        output.toString("UTF-8")
+    }
+}
+
 /** Only HTTPS signed log-download hosts used by GitHub Actions are eligible. */
 fun isSafeJobLogHost(host: String): Boolean {
     val normalized = host.lowercase()
     return normalized.endsWith(".actions.githubusercontent.com") ||
         normalized.endsWith(".blob.core.windows.net")
+}
+
+/** Signed job-log URLs must not include credential-bearing userinfo or alternate ports. */
+internal fun isSafeJobLogURL(raw: String): Boolean {
+    val url = runCatching { URL(raw) }.getOrNull() ?: return false
+    return url.protocol == "https" && isSafeJobLogHost(url.host) &&
+        (url.port == -1 || url.port == 443) && url.userInfo == null && url.ref == null
 }
 
 class GitHubHttp {
@@ -55,10 +79,10 @@ class GitHubHttp {
             }
             if (status !in 300..399) throw GitHubApiException(status, "Job logs unavailable: GitHub HTTP " + status)
             val location = first.getHeaderField("Location") ?: throw IOException("Missing job log redirect")
-            val redirect = URL(location)
-            if (redirect.protocol != "https" || !isSafeJobLogHost(redirect.host)) {
-                throw IOException("Job log redirect host is not trusted. Open logs on GitHub instead.")
+            if (!isSafeJobLogURL(location)) {
+                throw IOException("Job log redirect URL is not trusted. Open logs on GitHub instead.")
             }
+            val redirect = URL(location)
             val second = redirect.openConnection() as HttpURLConnection
             second.instanceFollowRedirects = false
             second.connectTimeout = 15000
@@ -127,8 +151,8 @@ class GitHubHttp {
                 conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
             }
             val code = conn.responseCode
-            val result = (if (code in 200..299) conn.inputStream else conn.errorStream)
-                ?.bufferedReader()?.use { it.readText() }.orEmpty()
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            val result = stream?.let(::readBoundedGitHubBody).orEmpty()
             if (code !in 200..299) {
                 val reason = runCatching { JSONObject(result).optString("message") }.getOrNull().orEmpty()
                 val limited = code == 429 || (code == 403 &&
