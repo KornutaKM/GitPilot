@@ -36,6 +36,28 @@ class GitHubDomainTest {
         assertFalse(isSafeJobLogHost("example.org"))
     }
 
+    @Test fun signedLogRedirectsRejectAlternateOriginsAndCredentials() {
+        assertTrue(isSafeJobLogURL("https://pipelines.actions.githubusercontent.com/log.txt"))
+        assertTrue(isSafeJobLogURL("https://builds.blob.core.windows.net:443/archive"))
+        assertFalse(isSafeJobLogURL("http://pipelines.actions.githubusercontent.com/log.txt"))
+        assertFalse(isSafeJobLogURL("https://pipelines.actions.githubusercontent.com:8443/log"))
+        assertFalse(isSafeJobLogURL("https://user:secret@pipelines.actions.githubusercontent.com/log"))
+        assertFalse(isSafeJobLogURL("https://pipelines.actions.githubusercontent.com/log#fragment"))
+        assertFalse(isSafeJobLogURL("https://pipelines.actions.githubusercontent.com.evil.test/log"))
+    }
+
+    @Test fun restResponseReaderEnforcesByteLimit() {
+        assertEquals("ok", readBoundedGitHubBody("ok".byteInputStream(), maxBytes = 2))
+        val tooLarge = runCatching {
+            readBoundedGitHubBody("oversized".byteInputStream(), maxBytes = 3)
+        }.exceptionOrNull()
+        assertTrue(tooLarge is java.io.IOException)
+        val invalidLimit = runCatching {
+            readBoundedGitHubBody("x".byteInputStream(), maxBytes = 0)
+        }.exceptionOrNull()
+        assertTrue(invalidLimit is IllegalArgumentException)
+    }
+
     @Test fun workflowDispatchRefValidationRejectsUnsafeNames() {
         assertTrue(validGitRefName("main"))
         assertTrue(validGitRefName("release/1.2.0"))
