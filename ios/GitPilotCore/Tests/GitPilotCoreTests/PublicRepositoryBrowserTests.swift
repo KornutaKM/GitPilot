@@ -88,7 +88,7 @@ final class PublicRepositoryBrowserTests: XCTestCase {
             XCTAssertEqual(request.url?.path, "/repos/Octocat/GitPilot/commits")
             XCTAssertTrue(request.url!.absoluteString.contains("per_page=12"))
             return """
-            [{"sha":"abcdef0123456789","commit":{"message":"Update docs\nmore detail"},
+            [{"sha":"abcdef0123456789","commit":{"message":"Update docs\\nmore detail"},
               "html_url":"https://github.com/Octocat/GitPilot/commit/abcdef0123456789"}]
             """
         }
