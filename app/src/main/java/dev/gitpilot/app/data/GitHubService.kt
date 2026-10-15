@@ -748,19 +748,24 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
         )
     }
 
+    /** Show at most 60 recent commits for the selected branch on demand. */
     suspend fun commitsForBranch(repo: RepositoryItem, branch: String, token: String?): List<CommitItem> {
-        val path = "/repos/" + enc(repo.owner) + "/" + enc(repo.name) +
-            "/commits?sha=" + enc(branch) + "&per_page=12"
-        val array = JSONArray(http.get(path, token))
-        return (0 until array.length()).map { i ->
-            val item = array.getJSONObject(i)
-            val details = item.getJSONObject("commit")
-            val sha = item.getString("sha")
-            val author = item.optJSONObject("author")?.optString("login").orEmpty()
-                .ifBlank { details.optJSONObject("author")?.optString("name").orEmpty() }
-            CommitItem(sha.take(8), details.optString("message").lineSequence().firstOrNull().orEmpty(),
-                author, details.optJSONObject("author")?.optString("date").orEmpty().take(10),
-                -1, 0, 0, sha)
+        require(validGitRefName(branch)) { "Invalid branch reference." }
+        val path = "/repos/" + enc(repo.owner) + "/" + enc(repo.name) + "/commits"
+        return collectBoundedGitHubPages(pageSize = 20, maxPages = 3) { page ->
+            val route = gitHubPagedPath(path, 20, page) + "&sha=" + enc(branch)
+            val array = JSONArray(http.get(route, token))
+            (0 until array.length()).map { i ->
+                val item = array.getJSONObject(i)
+                val details = item.getJSONObject("commit")
+                val sha = item.getString("sha")
+                val author = item.optJSONObject("author")?.optString("login").orEmpty()
+                    .ifBlank { details.optJSONObject("author")?.optString("name").orEmpty() }
+                CommitItem(sha.take(8),
+                    details.optString("message").lineSequence().firstOrNull().orEmpty(),
+                    author, details.optJSONObject("author")?.optString("date").orEmpty().take(10),
+                    -1, 0, 0, sha)
+            }
         }
     }
 
