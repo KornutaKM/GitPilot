@@ -130,4 +130,30 @@ final class AuthenticatedContentsAPITests: XCTestCase {
             XCTFail("Out-of-directory response accepted")
         } catch { XCTAssertEqual(error as? AuthenticatedContentsAPI.ReadError, .invalidPayload) }
     }
+
+    func testOversizedBodyCannotBeDecodedOrStored() async {
+        let api = client(body: String(repeating: "a", count: 1_200_001))
+        do {
+            _ = try await api.directory(repository: repository, branch: "main",
+                                        token: "private-fixture")
+            XCTFail("Oversized protected directory accepted")
+        } catch { XCTAssertEqual(error as? AuthenticatedContentsAPI.ReadError, .oversizedResponse) }
+    }
+
+    func testMalformedBranchOrOversizedFileFailsBeforeDownload() async {
+        let api = client(body: "[]") { _ in XCTFail("Unsafe ref reached GitHub") }
+        do {
+            _ = try await api.directory(repository: repository,
+                                        branch: "main\\nAuthorization", token: "private-fixture")
+            XCTFail("Unsafe branch accepted")
+        } catch { XCTAssertEqual(error as? AuthenticatedContentsAPI.ReadError, .invalidInput) }
+        let oversized = try! JSONDecoder().decode(PublicFileEntry.self, from: Data("""
+        {"name":"large.txt","path":"large.txt","type":"file","size":64001}
+        """.utf8))
+        do {
+            _ = try await api.preview(repository: repository, branch: "main",
+                                      file: oversized, token: "private-fixture")
+            XCTFail("Oversized file preview accepted")
+        } catch { XCTAssertEqual(error as? AuthenticatedContentsAPI.ReadError, .oversizedResponse) }
+    }
 }
