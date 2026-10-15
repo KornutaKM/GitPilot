@@ -12,6 +12,7 @@ struct AuthenticatedDirectoryScreen: View {
     @State private var entries: [PublicFileEntry] = []
     @State private var loading = false
     @State private var errorMessage: String?
+    @State private var boundLogin: String?
 
     var body: some View {
         ScrollView {
@@ -19,7 +20,8 @@ struct AuthenticatedDirectoryScreen: View {
                 GPHeader(eyebrow: "PROTECTED SOURCE · READ ONLY",
                          title: path.isEmpty ? repository.name : String(path.split(separator: "/").last ?? "Files"),
                          subtitle: "\(repository.fullName) · \(branch)")
-                if account.authenticatedAs == nil || account.busy {
+                if account.authenticatedAs == nil || account.busy ||
+                   (boundLogin != nil && account.authenticatedAs?.lowercased() != boundLogin?.lowercased()) {
                     GPEmptyState(icon: "lock.shield.fill", title: "Protected repository locked",
                                  detail: "A verified GitHub App session is required.")
                 } else {
@@ -91,6 +93,8 @@ struct AuthenticatedDirectoryScreen: View {
     private func load() async {
         clear()
         guard let expectedLogin = account.authenticatedAs, !account.busy else { return }
+        if let boundLogin, boundLogin.lowercased() != expectedLogin.lowercased() { return }
+        if boundLogin == nil { boundLogin = expectedLogin }
         loading = true
         do {
             let token = try await account.tokenForProtectedRead()
@@ -123,13 +127,15 @@ struct AuthenticatedFileScreen: View {
     @State private var preview: PublicFilePreview?
     @State private var loading = false
     @State private var errorMessage: String?
+    @State private var boundLogin: String?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 GPHeader(eyebrow: "PROTECTED TEXT · READ ONLY", title: file.name,
                          subtitle: file.path)
-                if account.authenticatedAs == nil || account.busy {
+                if account.authenticatedAs == nil || account.busy ||
+                   (boundLogin != nil && account.authenticatedAs?.lowercased() != boundLogin?.lowercased()) {
                     GPEmptyState(icon: "lock.shield.fill", title: "Preview locked",
                                  detail: "Sign in again to view protected source.")
                 } else {
@@ -175,6 +181,8 @@ struct AuthenticatedFileScreen: View {
     private func load() async {
         clear()
         guard let expectedLogin = account.authenticatedAs, !account.busy else { return }
+        if let boundLogin, boundLogin.lowercased() != expectedLogin.lowercased() { return }
+        if boundLogin == nil { boundLogin = expectedLogin }
         loading = true
         do {
             let token = try await account.tokenForProtectedRead()
