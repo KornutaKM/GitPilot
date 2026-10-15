@@ -392,7 +392,7 @@ private struct ProfileEditor: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .submitLabel(.done)
-                    Text("Only public repositories are visible. No authentication tokens are saved.")
+                    Text("Public browsing never uses a token. Optional GitHub App login stores credentials only in the device-bound iOS Keychain.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("GitHub App OAuth (read-only preview)") {
