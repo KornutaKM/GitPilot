@@ -1,0 +1,32 @@
+name: iOS Core CI
+
+on:
+  pull_request:
+    paths:
+      - 'ios/GitPilotCore/**'
+      - '.github/workflows/ios-core.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ios-core-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  swift-core:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Report Swift toolchain
+        run: swift --version
+      - name: Compile GitPilot Swift core (Release)
+        run: swift build --package-path ios/GitPilotCore --configuration release
+      - name: Run iOS foundation security and diff regression tests
+        run: swift test --package-path ios/GitPilotCore --parallel
