@@ -87,6 +87,11 @@ final class OAuthLogin: NSObject {
         return try await GitHubOAuthGateway(base: backend).exchange(code: code, verifier: verifier)
     }
 
+    func cancelSignIn() {
+        browserSession?.cancel()
+        browserSession = nil
+    }
+
     func refresh(_ credential: OAuthCredentials) async throws -> OAuthCredentials {
         guard let backend = OAuthConfiguration.backendURL else { throw LoginError.notConfigured }
         return try await GitHubOAuthGateway(base: backend).refresh(credential)
