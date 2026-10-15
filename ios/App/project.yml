@@ -21,6 +21,7 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         TARGETED_DEVICE_FAMILY: '1,2'
         CODE_SIGNING_ALLOWED: NO
+        CODE_SIGN_ENTITLEMENTS: Config/SimulatorKeychain.entitlements
         # Public identifiers/configuration only. NEVER pass the GitHub App client secret.
         GITPILOT_OAUTH_CLIENT_ID: ''
         GITPILOT_OAUTH_BACKEND_URL: ''
