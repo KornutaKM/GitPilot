@@ -140,6 +140,7 @@ struct AuthenticatedPullDetailsScreen: View {
         guard let expectedLogin = account.authenticatedAs, !account.busy else { return }
         let requestGeneration = generation
         loading = true
+        defer { if requestGeneration == generation { loading = false } }
         do {
             let token = try await account.tokenForProtectedRead()
             let revision = account.authRevision
@@ -165,7 +166,6 @@ struct AuthenticatedPullDetailsScreen: View {
             }
             errorMessage = error.localizedDescription
         }
-        if requestGeneration == generation { loading = false }
     }
 }
 
@@ -258,6 +258,7 @@ struct AuthenticatedWorkflowJobsScreen: View {
         guard let expectedLogin = account.authenticatedAs, !account.busy else { return }
         let requestGeneration = generation
         loading = true
+        defer { if requestGeneration == generation { loading = false } }
         do {
             let token = try await account.tokenForProtectedRead()
             let revision = account.authRevision
@@ -279,6 +280,5 @@ struct AuthenticatedWorkflowJobsScreen: View {
             }
             errorMessage = error.localizedDescription
         }
-        if requestGeneration == generation { loading = false }
     }
 }
