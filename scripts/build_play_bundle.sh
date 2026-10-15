@@ -31,7 +31,7 @@ verification="$(jarsigner -verify -verbose "$bundle" 2>&1)" || {
   echo 'AAB signature verification failed' >&2
   exit 3
 }
-grep -qi 'jar verified\\.' <<<"$verification" || {
+grep -Fqi 'jar verified.' <<<"$verification" || {
   echo 'AAB has no verified upload signature' >&2
   exit 3
 }
