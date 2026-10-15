@@ -77,4 +77,8 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     // JVM tests exercise real OAuth JSON decoding rather than android.jar stub methods.
     testImplementation("org.json:json:20240303")
+    // On-emulator smoke QA for native lifecycle, launch and public mode.
+    androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
 }
