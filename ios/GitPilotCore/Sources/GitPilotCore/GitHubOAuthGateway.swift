@@ -52,12 +52,16 @@ public struct GitHubOAuthGateway {
     private let base: URL
     private let transport: Transport
 
-    public init(base: URL, transport: @escaping Transport = { request in
-        let session = URLSession(configuration: .ephemeral,
-                                 delegate: DenyOAuthRedirect(), delegateQueue: nil)
-        defer { session.invalidateAndCancel() }
-        return try await session.data(for: request)
-    }) throws {
+    public init(base: URL) throws {
+        try self.init(base: base, transport: { request in
+            let session = URLSession(configuration: .ephemeral,
+                                     delegate: DenyOAuthRedirect(), delegateQueue: nil)
+            defer { session.invalidateAndCancel() }
+            return try await session.data(for: request)
+        })
+    }
+
+    public init(base: URL, transport: @escaping Transport) throws {
         guard GitHubOAuthGatewayPolicy.trustedBackend(base) else {
             throw GitHubOAuthGatewayError.unsafeConfiguration
         }
