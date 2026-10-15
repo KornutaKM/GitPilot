@@ -22,7 +22,7 @@ The dedicated [iOS Core CI](../.github/workflows/ios-core.yml) runs both command
 
 ## Native simulator integration smoke host
 
-`ios/App` is a temporary **non-production** SwiftUI smoke host that links the migrated Swift Package. Its Xcode project is generated from `ios/App/project.yml` with XcodeGen rather than committing build-system generated files. It has no OAuth integration, account access, GitHub writes, or secrets and includes an explicit privacy manifest.
+`ios/App` is a temporary **non-production** SwiftUI smoke host that links the migrated Swift Package and **the original RC3 Aurora design system** (`DesignSystem.swift`). Its Xcode project is generated from `ios/App/project.yml` with XcodeGen rather than committing build-system generated files. It has no OAuth integration, account access, GitHub writes, or secrets and includes an explicit privacy manifest.
 
 The dedicated [iOS Simulator Smoke CI](../.github/workflows/ios-simulator.yml) selects Xcode 26, generates an Xcode project, compiles an unsigned app for the generic iPhone Simulator destination, and uploads an **unsigned simulator-only artifact** for further review. This is not the archived RC3 application; a green simulator smoke build establishes native compiler/linker integration for the portable core only.
 
