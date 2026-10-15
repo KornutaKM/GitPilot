@@ -1,0 +1,32 @@
+name: GitPilotCoreSmoke
+options:
+  minimumXcodeGenVersion: 2.40.0
+packages:
+  GitPilotCore:
+    path: ../GitPilotCore
+targets:
+  GitPilotCoreSmoke:
+    type: application
+    platform: iOS
+    deploymentTarget: '16.0'
+    sources:
+      - path: Sources
+    dependencies:
+      - package: GitPilotCore
+    settings:
+      base:
+        SWIFT_VERSION: '5.9'
+        PRODUCT_BUNDLE_IDENTIFIER: dev.gitpilot.core.smoke
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        TARGETED_DEVICE_FAMILY: '1,2'
+        CODE_SIGNING_ALLOWED: NO
+schemes:
+  GitPilotCoreSmoke:
+    build:
+      targets:
+        GitPilotCoreSmoke: all
+    run:
+      config: Debug
+    archive:
+      config: Release
