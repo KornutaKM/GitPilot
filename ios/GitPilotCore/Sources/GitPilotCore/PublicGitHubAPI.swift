@@ -54,7 +54,7 @@ public struct PublicGitHubAPI {
         return url
     }
 
-    private func get<T: Decodable>(
+    func get<T: Decodable>(
         path: String, query: [URLQueryItem], as type: T.Type
     ) async throws -> T {
         var parts = URLComponents()
