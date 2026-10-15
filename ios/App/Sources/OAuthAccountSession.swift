@@ -68,6 +68,7 @@ final class OAuthAccountSession: ObservableObject {
     }
 
     func signIn() {
+        OAuthLogin.shared.cancelSignIn()
         guard isConfigured else {
             errorMessage = "GitHub App OAuth is not configured for this iOS build."
             return
@@ -101,6 +102,7 @@ final class OAuthAccountSession: ObservableObject {
     }
 
     func signOut() {
+        OAuthLogin.shared.cancelSignIn()
         operation?.cancel()
         do {
             // Do not report signed out if iOS refused to remove the Keychain item.
