@@ -35,3 +35,21 @@ internal fun gitHubPagedPath(path: String, pageSize: Int, page: Int): String {
     require(page in 1..5) { "Invalid GitHub page number" }
     return "$path?per_page=$pageSize&page=$page"
 }
+
+
+/**
+ * Multiple Compose recompositions must not trigger duplicate costly detail loads.
+ * A refresh uses a new generation so an old request cannot block new data.
+ */
+internal class GitHubDetailRequestGate {
+    private val active = mutableSetOf<Pair<Long, String>>()
+
+    @Synchronized
+    fun begin(generation: Long, key: String): Boolean =
+        active.add(generation to key)
+
+    @Synchronized
+    fun finish(generation: Long, key: String) {
+        active.remove(generation to key)
+    }
+}
