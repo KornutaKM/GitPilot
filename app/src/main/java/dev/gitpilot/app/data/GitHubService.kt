@@ -259,6 +259,27 @@ sealed interface PollResult {
     }
 }
 
+/** Expiring GitHub App sessions must include a complete refresh-token rotation pair. */
+internal fun decodeOAuthAuthorization(json: JSONObject, requireRefresh: Boolean = false): PollResult.Authorized {
+    val access = checkedOAuthToken(json.optString("access_token"), "access token")!!
+    fun seconds(field: String): Long? {
+        if (!json.has(field) || json.isNull(field)) return null
+        val value = json.optLong(field, -1L)
+        if (value !in 1L..315_360_000L) {
+            throw IOException("GitHub returned an invalid OAuth token lifetime")
+        }
+        return value
+    }
+    val expires = seconds("expires_in")
+    val refresh = checkedOAuthToken(json.optString("refresh_token"), "refresh token", required = false)
+    val refreshExpires = seconds("refresh_token_expires_in")
+    if ((expires == null) != (refresh == null) ||
+        (refresh == null) != (refreshExpires == null) || (requireRefresh && refresh == null)) {
+        throw IOException("GitHub returned an incomplete OAuth credential rotation")
+    }
+    return PollResult.Authorized(access, expires, refresh, refreshExpires)
+}
+
 class GitHubDeviceAuth(private val http: GitHubHttp = GitHubHttp()) {
     suspend fun begin(clientId: String): GitHubDeviceCode {
         val json = http.oauth("/login/device/code", mapOf("client_id" to clientId))
@@ -273,15 +294,7 @@ class GitHubDeviceAuth(private val http: GitHubHttp = GitHubHttp()) {
             "grant_type" to "urn:ietf:params:oauth:grant-type:device_code"
         ))
         return when (json.optString("error")) {
-            "" -> {
-                val token = checkedOAuthToken(json.optString("access_token"), "access token")!!
-                PollResult.Authorized(
-                    token,
-                    if (json.has("expires_in")) json.optLong("expires_in") else null,
-                    checkedOAuthToken(json.optString("refresh_token"), "refresh token", required = false),
-                    if (json.has("refresh_token_expires_in")) json.optLong("refresh_token_expires_in") else null
-                )
-            }
+            "" -> decodeOAuthAuthorization(json)
             "authorization_pending" -> PollResult.Pending
             "slow_down" -> PollResult.SlowDown(
                 safeDevicePollInterval(maxOf(code.intervalSeconds + 5L,
@@ -300,13 +313,7 @@ class GitHubDeviceAuth(private val http: GitHubHttp = GitHubHttp()) {
         if (error.isNotBlank() && error != "null") {
             throw GitHubOAuthException(error)
         }
-        val token = checkedOAuthToken(json.optString("access_token"), "access token")!!
-        return PollResult.Authorized(
-            token,
-            if (json.has("expires_in")) json.optLong("expires_in") else null,
-            checkedOAuthToken(json.optString("refresh_token"), "refresh token", required = false),
-            if (json.has("refresh_token_expires_in")) json.optLong("refresh_token_expires_in") else null
-        )
+        return decodeOAuthAuthorization(json, requireRefresh = true)
     }
 
 }
