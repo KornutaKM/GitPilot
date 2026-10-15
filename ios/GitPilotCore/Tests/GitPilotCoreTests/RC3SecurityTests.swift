@@ -112,4 +112,43 @@ final class RC3SecurityTests: XCTestCase {
         XCTAssertLessThanOrEqual(lines.count, 20)
         XCTAssertTrue(lines.contains { $0.kind == .warning })
     }
+
+    private func stagedEdit(_ path: String, updated: String = "changed") -> StagedFileEdit {
+        StagedFileEdit(repositoryID: 42, repositoryFullName: "owner/repo", path: path,
+            branch: "feature", originalBlobSHA: String(repeating: "a", count: 40),
+            originalContent: "before", newContent: updated)
+    }
+
+    func testStagedEnvelopeRejectsAnotherAccount() throws {
+        let envelope = try StagedDraftEnvelope(accountLogin: "Alice", edits: [stagedEdit("file.swift")])
+        XCTAssertNoThrow(try envelope.validate(for: "ALICE"))
+        XCTAssertThrowsError(try envelope.validate(for: "Bob"))
+    }
+
+    func testStagedEnvelopeRejectsDuplicateAndExcessEdits() {
+        XCTAssertThrowsError(try StagedDraftEnvelope(accountLogin: "Alice", edits: [stagedEdit("x"), stagedEdit("x")]))
+        let many = (0..<13).map { stagedEdit("f\($0)") }
+        XCTAssertThrowsError(try StagedDraftEnvelope(accountLogin: "Alice", edits: many))
+    }
+
+    func testStagedEnvelopeRejectsOversizedContent() {
+        XCTAssertThrowsError(try StagedDraftEnvelope(accountLogin: "Alice", edits: [
+            stagedEdit("large", updated: String(repeating: "x", count: 200_001))
+        ]))
+    }
+
+    func testStagedEnvelopeRejectsBlankAccount() {
+        XCTAssertThrowsError(try StagedDraftEnvelope(accountLogin: "  ", edits: [stagedEdit("x")]))
+    }
+
+    func testStagedEnvelopeDoesNotLeakUncommittedSourceInLogs() throws {
+        let edit = StagedFileEdit(repositoryID: 42, repositoryFullName: "private-owner/private-repo",
+            path: "secret.swift", branch: "feature", originalBlobSHA: "a",
+            originalContent: "secret-before-content", newContent: "secret-after-content")
+        let envelope = try StagedDraftEnvelope(accountLogin: "private-user", edits: [edit])
+        XCTAssertFalse(String(reflecting: edit).contains("secret-after-content"))
+        XCTAssertFalse(String(reflecting: edit).contains("private-owner"))
+        XCTAssertFalse(String(describing: envelope).contains("private-user"))
+        XCTAssertFalse(String(reflecting: envelope).contains("secret-before-content"))
+    }
 }
