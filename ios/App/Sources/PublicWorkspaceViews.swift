@@ -167,6 +167,36 @@ private struct TodayScreen: View {
     }
 }
 
+/// The public tabs remain anonymous; protected activity is deliberately
+/// routed through a verified repository picker, not mixed into public counts.
+private struct ProtectedBrowseShortcut: View {
+    let mode: String
+    @EnvironmentObject private var account: OAuthAccountSession
+
+    var body: some View {
+        if account.authenticatedAs != nil && !account.busy {
+            NavigationLink {
+                AuthenticatedRepositoriesScreen()
+            } label: {
+                Surface {
+                    Label("Browse " + mode, systemImage: "lock.shield.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                    MetaText(text: "Verified GitHub App only · private data remains in memory")
+                }
+            }
+            .buttonStyle(.plain)
+        } else {
+            Surface {
+                Label("Private " + mode + " locked", systemImage: "lock.fill")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(GP.secondary)
+                MetaText(text: "Connect your GitHub App from the profile sheet to enable protected browsing.")
+            }
+        }
+    }
+}
+
 private struct ReviewsScreen: View {
     @ObservedObject var store: PublicWorkspaceStore
     var body: some View {
@@ -174,6 +204,7 @@ private struct ReviewsScreen: View {
             LazyVStack(alignment: .leading, spacing: 14) {
                 GPHeader(eyebrow: "PULL REQUESTS", title: "Reviews.",
                          subtitle: "Open pull requests from monitored public repositories.")
+                ProtectedBrowseShortcut(mode: "private pull requests")
                 LoadingOrError(store: store)
                 if store.pullRequests.isEmpty && !store.isLoading {
                     GPEmptyState(icon: "arrow.triangle.pull", title: "No PRs in loaded sample",
@@ -230,6 +261,7 @@ private struct ActionsScreen: View {
             LazyVStack(alignment: .leading, spacing: 14) {
                 GPHeader(eyebrow: "GITHUB ACTIONS", title: "Workflows.",
                          subtitle: "Recent runs in the monitored public repositories. No write actions.")
+                ProtectedBrowseShortcut(mode: "private workflow runs")
                 LoadingOrError(store: store)
                 if store.workflowRuns.isEmpty && !store.isLoading {
                     GPEmptyState(icon: "bolt", title: "No runs in loaded sample",
