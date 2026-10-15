@@ -15,8 +15,9 @@ for name in "${required[@]}"; do
     exit 2
   fi
 done
-if [[ ! -r "${GITPILOT_SIGNING_STORE_FILE}" ]]; then
-  echo "Cannot read release signing keystore" >&2
+# A directory, an empty file, or an unreadable path must never be accepted.
+if [[ ! -f "${GITPILOT_SIGNING_STORE_FILE}" || ! -r "${GITPILOT_SIGNING_STORE_FILE}" || ! -s "${GITPILOT_SIGNING_STORE_FILE}" ]]; then
+  echo "Release signing keystore must be a nonempty readable regular file" >&2
   exit 2
 fi
 command -v jarsigner >/dev/null || { echo 'JDK jarsigner is required' >&2; exit 2; }
@@ -30,7 +31,7 @@ verification="$(jarsigner -verify -verbose "$bundle" 2>&1)" || {
   echo 'AAB signature verification failed' >&2
   exit 3
 }
-grep -qi 'jar verified\.' <<<"$verification" || {
+grep -qi 'jar verified\\.' <<<"$verification" || {
   echo 'AAB has no verified upload signature' >&2
   exit 3
 }
