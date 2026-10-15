@@ -1,35 +1,46 @@
 import Foundation
 
 /// A staged remote edit is plaintext only in memory or inside the encrypted vault.
-struct StagedFileEdit: Codable, Identifiable, Equatable, CustomStringConvertible, CustomDebugStringConvertible {
-    let repositoryID: Int
-    let repositoryFullName: String
-    let path: String
-    let branch: String
-    let originalBlobSHA: String
-    let originalContent: String
-    let newContent: String
+public struct StagedFileEdit: Codable, Identifiable, Equatable, CustomStringConvertible, CustomDebugStringConvertible {
+    public let repositoryID: Int
+    public let repositoryFullName: String
+    public let path: String
+    public let branch: String
+    public let originalBlobSHA: String
+    public let originalContent: String
+    public let newContent: String
 
-    var id: String { "\(repositoryID):\(branch):\(path)" }
-    var byteCount: Int { newContent.utf8.count }
-    var description: String { "StagedFileEdit(<redacted>)" }
-    var debugDescription: String { description }
+    public init(repositoryID: Int, repositoryFullName: String, path: String,
+                branch: String, originalBlobSHA: String,
+                originalContent: String, newContent: String) {
+        self.repositoryID = repositoryID
+        self.repositoryFullName = repositoryFullName
+        self.path = path
+        self.branch = branch
+        self.originalBlobSHA = originalBlobSHA
+        self.originalContent = originalContent
+        self.newContent = newContent
+    }
+    public var id: String { "\(repositoryID):\(branch):\(path)" }
+    public var byteCount: Int { newContent.utf8.count }
+    public var description: String { "StagedFileEdit(<redacted>)" }
+    public var debugDescription: String { description }
 }
 
 /// Versioned plaintext *inside* the encrypted on-device vault. Never write it
 /// to UserDefaults, a log, or an unprotected file.
-struct StagedDraftEnvelope: Codable, CustomStringConvertible, CustomDebugStringConvertible {
-    static let currentVersion = 1
-    let version: Int
-    let accountLogin: String
-    let edits: [StagedFileEdit]
+public struct StagedDraftEnvelope: Codable, CustomStringConvertible, CustomDebugStringConvertible {
+    public static let currentVersion = 1
+    public let version: Int
+    public let accountLogin: String
+    public let edits: [StagedFileEdit]
 
-    var description: String { "StagedDraftEnvelope(account=<redacted>, edits=\(edits.count))" }
-    var debugDescription: String { description }
+    public var description: String { "StagedDraftEnvelope(account=<redacted>, edits=\(edits.count))" }
+    public var debugDescription: String { description }
 
-    enum ValidationError: LocalizedError, Equatable {
+    public enum ValidationError: LocalizedError, Equatable {
         case wrongAccount, incompatibleVersion, invalidContents
-        var errorDescription: String? {
+        public var errorDescription: String? {
             switch self {
             case .wrongAccount: return "Saved drafts belong to another GitHub account."
             case .incompatibleVersion: return "Saved drafts were created by an incompatible GitPilot version."
@@ -38,14 +49,14 @@ struct StagedDraftEnvelope: Codable, CustomStringConvertible, CustomDebugStringC
         }
     }
 
-    init(accountLogin: String, edits: [StagedFileEdit]) throws {
+    public init(accountLogin: String, edits: [StagedFileEdit]) throws {
         version = Self.currentVersion
         self.accountLogin = accountLogin.lowercased()
         self.edits = edits
         try validate(for: accountLogin)
     }
 
-    func validate(for account: String) throws {
+    public func validate(for account: String) throws {
         guard version == Self.currentVersion else { throw ValidationError.incompatibleVersion }
         guard !account.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               accountLogin.lowercased() == account.lowercased() else {
