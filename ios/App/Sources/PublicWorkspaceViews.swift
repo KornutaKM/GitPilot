@@ -145,12 +145,16 @@ private struct TodayScreen: View {
         .navigationTitle("Today")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Profile", systemImage: "person.crop.circle") { showingProfile = true }
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button { showingProfile = true } label: {
+                    Label("Profile", systemImage: "person.crop.circle")
+                }
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Refresh", systemImage: "arrow.clockwise") { store.refresh() }
-                    .disabled(store.isLoading)
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button { store.refresh() } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .disabled(store.isLoading)
             }
         }
         .sheet(isPresented: $showingProfile) { ProfileEditor(store: store) }
@@ -246,8 +250,10 @@ private struct RepositoriesScreen: View {
             LazyVStack(alignment: .leading, spacing: 14) {
                 GPHeader(eyebrow: "@\(store.username)", title: "Repositories.",
                          subtitle: "Recent public repositories, sorted by activity.")
-                Button("Browse another public profile", systemImage: "person.crop.circle.badge.questionmark") {
+                Button {
                     showingProfile = true
+                } label: {
+                    Label("Browse another public profile", systemImage: "person.crop.circle.badge.questionmark")
                 }
                 .buttonStyle(.bordered)
                 LoadingOrError(store: store)
@@ -372,7 +378,7 @@ private struct ProfileEditor: View {
                 }
             }
             .navigationTitle("GitHub profile")
-            .toolbar { ToolbarItem(placement: .topBarTrailing) {
+            .toolbar { ToolbarItem(placement: .navigationBarTrailing) {
                 Button("Cancel") { dismiss() }
             }}
             .onAppear { draft = store.username }
