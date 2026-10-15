@@ -61,6 +61,12 @@ Protected results exist **in process memory only**; every account change, sign-o
 
 Remote file editing, posting PR reviews, merges, workflow dispatch and repository mutations remain **disabled**. Private file content is not downloaded by this new list and no application secrets, client secrets or production signing keys are committed.
 
+## Protected repository source (PR #15)
+
+After a verified GitHub App sign-in, the protected repository list can open **private directories and small text files** using a separate authenticated, read-only GET client. The client validates repository/branch/path, sends the bearer exclusively to `https://api.github.com/repos/<owner>/<repo>/contents/...`, forbids redirects, caps a directory at 100 entries and accepts only UTF-8 text previews of at most 64 KB. Symlink/submodule entries are not followed; binary files, path traversal, malformed Base64 and oversized responses fail closed. Private source is held in memory only and cleared when navigation ends or OAuth identity/revision changes.
+
+The protected source feature includes nine offline Swift mock-transport regression tests. Public browsing remains unauthenticated. **No edits, commits, PR comments, merges or workflow dispatches are enabled.** Real OAuth/gateway and private repository permissions still need verification on a signed iPhone before release.
+
 ## Remaining migration and release gates
 
 **Not yet migrated into this GitHub repository:** the full authenticated RC3 SwiftUI flows, the full write-capable network stack, production Xcode project, app assets, Keychain-backed authenticated workspace and staged draft editing integration, configured/validated Cloudflare OAuth gateway deployment, signed Universal Link support, and remote mutation feature screens. The simulator smoke host is not a replacement for these. The pre-existing RC3 archive includes those sources; it has not passed a native Xcode build and must be integrated and verified before TestFlight. Mac Swift Package tests are a foundation check, **not** an iOS simulator build or an iPhone QA pass.
