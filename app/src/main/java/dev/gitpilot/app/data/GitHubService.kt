@@ -202,6 +202,39 @@ class GitHubHttp {
     }
 }
 
+/** Device authorization must never open an arbitrary URI returned by an API response. */
+internal fun isSafeGitHubDeviceVerificationUri(raw: String): Boolean {
+    val uri = runCatching { java.net.URI(raw) }.getOrNull() ?: return false
+    return uri.scheme.equals("https", ignoreCase = true) &&
+        uri.host.equals("github.com", ignoreCase = true) &&
+        uri.rawUserInfo == null && (uri.port == -1 || uri.port == 443) &&
+        uri.path == "/login/device" && uri.rawQuery == null && uri.rawFragment == null
+}
+
+/** Bound time values from the OAuth server before using them for polling or delays. */
+internal fun safeDevicePollInterval(seconds: Long): Long = seconds.coerceIn(5L, 60L)
+
+internal fun safeDeviceExpiry(seconds: Long): Long =
+    seconds.takeIf { it in 1L..1_800L }
+        ?: throw IOException("GitHub returned an invalid device authorization lifetime")
+
+internal fun decodeGitHubDeviceCode(json: JSONObject): GitHubDeviceCode {
+    val deviceCode = checkedOAuthToken(json.optString("device_code"), "device code")!!
+    val userCode = checkedOAuthToken(json.optString("user_code"), "user code")!!
+    if (!userCode.matches(Regex("[A-Za-z0-9-]{4,64}"))) {
+        throw IOException("GitHub returned an invalid user authorization code")
+    }
+    val verificationUri = json.optString("verification_uri")
+    if (!isSafeGitHubDeviceVerificationUri(verificationUri)) {
+        throw IOException("GitHub returned an untrusted device authorization address")
+    }
+    return GitHubDeviceCode(
+        deviceCode, userCode, verificationUri,
+        safeDeviceExpiry(json.optLong("expires_in", 900L)),
+        safeDevicePollInterval(json.optLong("interval", 5L))
+    )
+}
+
 data class GitHubDeviceCode(
     val deviceCode: String, val userCode: String, val verificationUri: String,
     val expiresInSeconds: Long, val intervalSeconds: Long
@@ -230,11 +263,7 @@ class GitHubDeviceAuth(private val http: GitHubHttp = GitHubHttp()) {
     suspend fun begin(clientId: String): GitHubDeviceCode {
         val json = http.oauth("/login/device/code", mapOf("client_id" to clientId))
         if (json.has("error") && !json.isNull("error")) throw GitHubOAuthException(json.optString("error"))
-        return GitHubDeviceCode(
-            json.getString("device_code"), json.getString("user_code"),
-            json.getString("verification_uri"), json.optLong("expires_in", 900),
-            json.optLong("interval", 5).coerceAtLeast(5)
-        )
+        return decodeGitHubDeviceCode(json)
     }
 
     suspend fun poll(clientId: String, code: GitHubDeviceCode): PollResult {
@@ -254,7 +283,10 @@ class GitHubDeviceAuth(private val http: GitHubHttp = GitHubHttp()) {
                 )
             }
             "authorization_pending" -> PollResult.Pending
-            "slow_down" -> PollResult.SlowDown(json.optLong("interval", code.intervalSeconds + 5))
+            "slow_down" -> PollResult.SlowDown(
+                safeDevicePollInterval(maxOf(code.intervalSeconds + 5L,
+                    json.optLong("interval", code.intervalSeconds + 5L)))
+            )
             else -> throw GitHubOAuthException(json.optString("error"))
         }
     }
