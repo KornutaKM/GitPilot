@@ -85,4 +85,31 @@ final class RC3SecurityTests: XCTestCase {
         XCTAssertTrue(credentials.needsRefresh)
         XCTAssertTrue(credentials.canRefresh)
     }
+
+    func testStagedDiffPreviewTracksSmallLineChanges() {
+        let result = StagedDiffPreview.lines(from: "first\nold", to: "first\nnew")
+        XCTAssertTrue(result.contains { $0.kind == .removed && $0.text == "old" })
+        XCTAssertTrue(result.contains { $0.kind == .added && $0.text == "new" })
+    }
+
+    func testStagedDiffPreviewIsBoundedForLargeContent() {
+        let text = (0..<1201).map(String.init).joined(separator: "\n")
+        let result = StagedDiffPreview.lines(from: text, to: "small")
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(result[0].kind, .warning)
+    }
+
+    func testStagedDiffPreviewRejectsInvalidLimit() {
+        let result = StagedDiffPreview.lines(from: "before", to: "after", maxLines: 0)
+        XCTAssertEqual(result.first?.kind, .warning)
+        XCTAssertEqual(result.count, 1)
+    }
+
+    func testStagedDiffPreviewCapsLargeChangedPatch() {
+        let before = (0..<100).map { "old-\($0)" }.joined(separator: "\n")
+        let after = (0..<100).map { "new-\($0)" }.joined(separator: "\n")
+        let lines = StagedDiffPreview.lines(from: before, to: after, maxLines: 20)
+        XCTAssertLessThanOrEqual(lines.count, 20)
+        XCTAssertTrue(lines.contains { $0.kind == .warning })
+    }
 }
