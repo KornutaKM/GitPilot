@@ -75,4 +75,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
+    // JVM tests exercise real OAuth JSON decoding rather than android.jar stub methods.
+    testImplementation("org.json:json:20240303")
 }

@@ -154,7 +154,6 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                         commitFiles = emptyMap(), branchLoading = false, detailLoading = false)
                 }
             } catch (e: Exception) {
-               if (e is kotlinx.coroutines.CancellationException) throw e
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 if (e is GitHubApiException && e.statusCode == 401) invalidateSession()
                 mutable.update { it.copy(loading = false, error = cleanError(e)) }
@@ -268,18 +267,22 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val code = deviceAuth.begin(clientId)
                 mutable.update { it.copy(deviceCode = code) }
+                // Server values are validated by decodeGitHubDeviceCode.
                 val deadline = System.currentTimeMillis() + code.expiresInSeconds * 1000L
-                var interval = code.intervalSeconds
+                var interval = safeDevicePollInterval(code.intervalSeconds)
                 while (System.currentTimeMillis() < deadline) {
                     delay(interval * 1000L)
                     when (val answer = deviceAuth.poll(clientId, code)) {
                         is PollResult.Pending -> Unit
-                        is PollResult.SlowDown -> interval = answer.intervalSeconds.coerceAtLeast(5)
+                        is PollResult.SlowDown ->
+                            interval = safeDevicePollInterval(maxOf(interval + 5L, answer.intervalSeconds))
                         is PollResult.Authorized -> {
-                            authEpoch += 1
+                            // Replace every account-scoped cache BEFORE saving credentials.
+                            // Otherwise the prior account's private diffs and file previews
+                            // remain visible while the new viewer's workspace loads.
+                            invalidateSession()
                             session.save(answer.accessToken, answer.expiresInSeconds,
                                 answer.refreshToken, answer.refreshExpiresInSeconds)
-                            mutable.update { it.copy(deviceCode = null, signingIn = false) }
                             refresh()
                             return@launch
                         }
@@ -287,7 +290,6 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 throw IOException("Authorization expired. Please try again.")
             } catch (e: Exception) {
-               if (e is kotlinx.coroutines.CancellationException) throw e
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 mutable.update { it.copy(signingIn = false, deviceCode = null, error = cleanError(e)) }
             }
@@ -459,7 +461,6 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                 val text = service.fetchJobLog(run, step, currentToken())
                 if (epoch == authEpoch) mutable.update { it.copy(jobLogs = it.jobLogs + (step.id to text), loadingJobId = null) }
             } catch (e: Exception) {
-               if (e is kotlinx.coroutines.CancellationException) throw e
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 if (epoch == authEpoch) mutable.update { it.copy(loadingJobId = null, error = cleanError(e)) }
             }
@@ -594,7 +595,6 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                     loadingDefinitionsId = null
                 ) }
             } catch (e: Exception) {
-               if (e is kotlinx.coroutines.CancellationException) throw e
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 if (epoch == authEpoch) mutable.update { it.copy(loadingDefinitionsId = null, error = cleanError(e)) }
             }
