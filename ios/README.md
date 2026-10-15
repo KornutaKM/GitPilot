@@ -67,6 +67,14 @@ After a verified GitHub App sign-in, the protected repository list can open **pr
 
 The protected source feature includes nine offline Swift mock-transport regression tests. Public browsing remains unauthenticated. **No edits, commits, PR comments, merges or workflow dispatches are enabled.** Real OAuth/gateway and private repository permissions still need verification on a signed iPhone before release.
 
+## Verified Reviews and Actions (PR #16)
+
+The iOS Aurora app now exposes **read-only Reviews and Actions for verified GitHub accounts**. From either public tab, users can open the protected repository picker, select an authorized repo, and browse private-source files, open pull requests (up to 3 × 20), diff patches (first 30 files, max 80 KB per patch), conversation and inline review comments (first 20 of each type), workflow runs (up to 3 × 20), and the first 50 jobs of a run. All counts are explicitly labelled as bounded samples rather than complete repository coverage.
+
+All authenticated requests are named GET endpoints on exactly `https://api.github.com` with ephemeral no-redirect sessions. The bearer token comes exclusively from the Keychain-backed session coordinator. Protected result pages, private code patches, comments and job metadata remain in RAM, are cleared on navigation/logout, and are rejected if the account or authorization revision changes while the request is in flight. Failure of any required detail request shows an error rather than pretending the whole PR was loaded.
+
+Twelve deterministic XCTest transport regressions cover token injection, host redirection, pagination bounds, request methods, invalid IDs, large/broken responses, and distinct GitHub errors. The existing native Keychain/AES-GCM simulator tests remain release gates. **This milestone does not permit reviews, comments, merges, reruns, dispatches, file edits or commits**; live OAuth permissions and physical device QA are still pending.
+
 ## Remaining migration and release gates
 
 **Not yet migrated into this GitHub repository:** the full authenticated RC3 SwiftUI flows, the full write-capable network stack, production Xcode project, app assets, Keychain-backed authenticated workspace and staged draft editing integration, configured/validated Cloudflare OAuth gateway deployment, signed Universal Link support, and remote mutation feature screens. The simulator smoke host is not a replacement for these. The pre-existing RC3 archive includes those sources; it has not passed a native Xcode build and must be integrated and verified before TestFlight. Mac Swift Package tests are a foundation check, **not** an iOS simulator build or an iPhone QA pass.
