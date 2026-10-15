@@ -7,6 +7,8 @@ import GitPilotCore
 @MainActor
 final class OAuthAccountSession: ObservableObject {
     @Published private(set) var authenticatedAs: String?
+    /// Invalidates authenticated UI on sign-out, account change or token rotation.
+    @Published private(set) var authRevision = 0
     @Published private(set) var busy = false
     @Published var errorMessage: String?
 
@@ -48,6 +50,7 @@ final class OAuthAccountSession: ObservableObject {
                 guard current == epoch && !Task.isCancelled else { return }
                 if active != credentials { try OAuthTokenStore.save(active) }
                 authenticatedAs = login
+                authRevision += 1
                 busy = false
             } catch is CancellationError {
                 return
@@ -74,6 +77,7 @@ final class OAuthAccountSession: ObservableObject {
             return
         }
         epoch += 1
+        authRevision += 1
         let requestEpoch = epoch
         operation?.cancel()
         busy = true
@@ -90,6 +94,7 @@ final class OAuthAccountSession: ObservableObject {
                 }
                 try OAuthTokenStore.save(credentials)
                 authenticatedAs = login
+                authRevision += 1
                 busy = false
             } catch is CancellationError {
                 return
@@ -99,6 +104,53 @@ final class OAuthAccountSession: ObservableObject {
                 busy = false
             }
         }
+    }
+
+    enum ProtectedAccessError: Error, LocalizedError {
+        case notAuthenticated, sessionChanged
+        var errorDescription: String? {
+            switch self {
+            case .notAuthenticated: return "Sign in to view protected repositories."
+            case .sessionChanged: return "GitHub session changed. Reopen the protected view."
+            }
+        }
+    }
+
+    /// Only access-token retrieval for read-only /user/repos. Never let a
+    /// view access raw Keychain state or refresh credentials without epoch checks.
+    func tokenForProtectedRead() async throws -> String {
+        guard let identity = authenticatedAs, !busy else {
+            throw ProtectedAccessError.notAuthenticated
+        }
+        let requestEpoch = epoch
+        guard let saved = try OAuthTokenStore.read() else {
+            throw ProtectedAccessError.notAuthenticated
+        }
+        let current: OAuthCredentials
+        if saved.needsRefresh {
+            guard saved.canRefresh else {
+                signOut()
+                throw ProtectedAccessError.notAuthenticated
+            }
+            let updated = try await OAuthLogin.shared.refresh(saved)
+            let viewer = try await GitHubAuthenticatedViewer()
+                .verifiedLogin(token: updated.accessToken)
+            guard viewer.lowercased() == identity.lowercased() else {
+                throw ProtectedAccessError.sessionChanged
+            }
+            guard requestEpoch == epoch && !Task.isCancelled else {
+                throw ProtectedAccessError.sessionChanged
+            }
+            try OAuthTokenStore.save(updated)
+            current = updated
+            authRevision += 1
+        } else {
+            current = saved
+        }
+        guard requestEpoch == epoch && !Task.isCancelled && authenticatedAs == identity else {
+            throw ProtectedAccessError.sessionChanged
+        }
+        return current.accessToken
     }
 
     func signOut() {
@@ -112,6 +164,7 @@ final class OAuthAccountSession: ObservableObject {
             return
         }
         epoch += 1
+        authRevision += 1
         operation = nil
         authenticatedAs = nil
         busy = false

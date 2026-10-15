@@ -399,8 +399,14 @@ private struct ProfileEditor: View {
                     if let login = account.authenticatedAs {
                         Label("Connected as @\(login)", systemImage: "checkmark.shield.fill")
                             .foregroundStyle(.green)
-                        Text("Only account verification is authenticated. Repository browsing, PR reviews, merges and Actions writes remain disabled.")
+                        Text("Public tabs remain token-free. Protected repository listing is read-only and is never cached on disk.")
                             .font(.footnote).foregroundStyle(.secondary)
+                        NavigationLink {
+                            AuthenticatedRepositoriesScreen()
+                        } label: {
+                            Label("Browse accessible repositories", systemImage: "lock.folder")
+                        }
+                        .disabled(account.busy)
                         Button("Sign out and erase local draft key", role: .destructive) {
                             account.signOut()
                         }

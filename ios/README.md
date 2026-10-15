@@ -53,6 +53,14 @@ PublicGitHubAPI is tested with deterministic transport stubs (10 additional XCTe
 - Signing in is strictly a **read-only verified-account preview** at this stage: the public repository loader stays token-free. OAuth identity verification does not unlock private repositories, reviews, PR merges, Actions mutations or file writes.
 - SwiftPM includes mock transport tests for gateway origins, authorization and refresh payloads, hostile redirects, revocation and GitHub viewer verification. The iOS Simulator workflow also runs native XCTest against the actual Keychain and AES-GCM vault with test-only tokens. This is not physical-device or live-gateway acceptance testing.
 
+## Verified-account repository browsing (PR #14)
+
+Authenticated mode adds a **strictly read-only** `GET /user/repos` client and a protected SwiftUI repository list, accessible only after the OAuth session has verified `/user`. The client sends the bearer only to the exact GitHub API HTTPS endpoint, refuses redirects, parses bounded typed JSON (1.5 MB) and permits up to three pages of 20 repositories. Private or collaborator-owned repositories may appear depending on actual GitHub App access; the UI never implies the app has broader permissions.
+
+Protected results exist **in process memory only**; every account change, sign-out or token rotation invalidates the view's generation and discards stale responses. Only the session coordinator may read Keychain or refresh a credential. The public four-tab workspace continues to use its anonymous API client with no Authorization header. Eight deterministic mock-transport tests cover token injection, host redirects, permissions, malformed payloads and request limits.
+
+Remote file editing, posting PR reviews, merges, workflow dispatch and repository mutations remain **disabled**. Private file content is not downloaded by this new list and no application secrets, client secrets or production signing keys are committed.
+
 ## Remaining migration and release gates
 
 **Not yet migrated into this GitHub repository:** the full authenticated RC3 SwiftUI flows, the full write-capable network stack, production Xcode project, app assets, Keychain-backed authenticated workspace and staged draft editing integration, configured/validated Cloudflare OAuth gateway deployment, signed Universal Link support, and remote mutation feature screens. The simulator smoke host is not a replacement for these. The pre-existing RC3 archive includes those sources; it has not passed a native Xcode build and must be integrated and verified before TestFlight. Mac Swift Package tests are a foundation check, **not** an iOS simulator build or an iPhone QA pass.
