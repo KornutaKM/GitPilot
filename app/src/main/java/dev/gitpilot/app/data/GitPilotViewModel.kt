@@ -70,6 +70,7 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
     private var authEpoch = 0L
     private var mutationInProgress = false
     private var workspaceGeneration = 0L
+    private val detailRequestGate = GitHubDetailRequestGate()
 
     init { refresh() }
 
@@ -382,15 +383,24 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         val key = branchKey(repo, branch)
         if (mutable.value.branchCommits.containsKey(key)) return
         val epoch = authEpoch
+        val generation = workspaceGeneration
+        val requestKey = "commits:$key"
+        if (!detailRequestGate.begin(generation, requestKey)) return
         viewModelScope.launch {
-            if (epoch != authEpoch) return@launch
-            if (epoch == authEpoch) mutable.update { it.copy(branchLoading = true, error = null) }
             try {
+                if (epoch != authEpoch || generation != workspaceGeneration) return@launch
+                mutable.update { it.copy(branchLoading = true, error = null) }
                 val commits = service.commitsForBranch(repo, branch, currentToken())
-                if (epoch == authEpoch) mutable.update { it.copy(branchCommits = it.branchCommits + (key to commits), branchLoading = false) }
+                if (epoch == authEpoch && generation == workspaceGeneration) {
+                    mutable.update { it.copy(branchCommits = it.branchCommits + (key to commits), branchLoading = false) }
+                }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                if (epoch == authEpoch) mutable.update { it.copy(branchLoading = false, error = cleanError(e)) }
+                if (epoch == authEpoch && generation == workspaceGeneration) {
+                    mutable.update { it.copy(branchLoading = false, error = cleanError(e)) }
+                }
+            } finally {
+                detailRequestGate.finish(generation, requestKey)
             }
         }
     }
@@ -415,21 +425,27 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
     fun loadPullDiscussion(pr: PullRequestItem, force: Boolean = false) {
         val key = diffKey(pr)
         if (!force && mutable.value.discussion.containsKey(key)) return
-        if (mutable.value.loadingDiscussionKey == key) return
         val epoch = authEpoch
+        val generation = workspaceGeneration
+        val requestKey = "discussion:$key"
+        if (!detailRequestGate.begin(generation, requestKey)) return
         viewModelScope.launch {
-            if (epoch != authEpoch) return@launch
-            mutable.update { it.copy(loadingDiscussionKey = key, error = null) }
             try {
+                if (epoch != authEpoch || generation != workspaceGeneration) return@launch
+                mutable.update { it.copy(loadingDiscussionKey = key, error = null) }
                 val entries = service.pullDiscussion(pr, currentToken())
-                if (epoch == authEpoch) mutable.update {
-                    it.copy(discussion = it.discussion + (key to entries), loadingDiscussionKey = null)
+                if (epoch == authEpoch && generation == workspaceGeneration) {
+                    mutable.update {
+                        it.copy(discussion = it.discussion + (key to entries), loadingDiscussionKey = null)
+                    }
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                if (epoch == authEpoch) mutable.update {
-                    it.copy(loadingDiscussionKey = null, error = cleanError(e))
+                if (epoch == authEpoch && generation == workspaceGeneration) {
+                    mutable.update { it.copy(loadingDiscussionKey = null, error = cleanError(e)) }
                 }
+            } finally {
+                detailRequestGate.finish(generation, requestKey)
             }
         }
     }
@@ -438,15 +454,24 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         val key = diffKey(pr)
         if (mutable.value.diffs.containsKey(key)) return
         val epoch = authEpoch
+        val generation = workspaceGeneration
+        val requestKey = "pr-files:$key"
+        if (!detailRequestGate.begin(generation, requestKey)) return
         viewModelScope.launch {
-            if (epoch != authEpoch) return@launch
-            if (epoch == authEpoch) mutable.update { it.copy(detailLoading = true, error = null) }
             try {
+                if (epoch != authEpoch || generation != workspaceGeneration) return@launch
+                mutable.update { it.copy(detailLoading = true, error = null) }
                 val files = service.pullFiles(pr, currentToken())
-                if (epoch == authEpoch) mutable.update { it.copy(diffs = it.diffs + (key to files), detailLoading = false) }
+                if (epoch == authEpoch && generation == workspaceGeneration) {
+                    mutable.update { it.copy(diffs = it.diffs + (key to files), detailLoading = false) }
+                }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                if (epoch == authEpoch) mutable.update { it.copy(detailLoading = false, error = cleanError(e)) }
+                if (epoch == authEpoch && generation == workspaceGeneration) {
+                    mutable.update { it.copy(detailLoading = false, error = cleanError(e)) }
+                }
+            } finally {
+                detailRequestGate.finish(generation, requestKey)
             }
         }
     }
@@ -470,15 +495,24 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
     fun loadWorkflowJobs(run: WorkflowRunItem) {
         if (mutable.value.jobs.containsKey(run.id)) return
         val epoch = authEpoch
+        val generation = workspaceGeneration
+        val requestKey = "jobs:${run.id}"
+        if (!detailRequestGate.begin(generation, requestKey)) return
         viewModelScope.launch {
-            if (epoch != authEpoch) return@launch
-            if (epoch == authEpoch) mutable.update { it.copy(detailLoading = true, error = null) }
             try {
+                if (epoch != authEpoch || generation != workspaceGeneration) return@launch
+                mutable.update { it.copy(detailLoading = true, error = null) }
                 val jobs = service.workflowJobs(run, currentToken())
-                if (epoch == authEpoch) mutable.update { it.copy(jobs = it.jobs + (run.id to jobs), detailLoading = false) }
+                if (epoch == authEpoch && generation == workspaceGeneration) {
+                    mutable.update { it.copy(jobs = it.jobs + (run.id to jobs), detailLoading = false) }
+                }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                if (epoch == authEpoch) mutable.update { it.copy(detailLoading = false, error = cleanError(e)) }
+                if (epoch == authEpoch && generation == workspaceGeneration) {
+                    mutable.update { it.copy(detailLoading = false, error = cleanError(e)) }
+                }
+            } finally {
+                detailRequestGate.finish(generation, requestKey)
             }
         }
     }

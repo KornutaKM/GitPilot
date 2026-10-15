@@ -527,13 +527,26 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
         )
     }
 
-    /** Load the first 50 issue conversation and 50 inline review comments. */
+    /**
+     * Fetch GitHub detail pages only when a user opens their corresponding view.
+     * Bounded pages prevent surprising network scans of large organizations.
+     */
+    private suspend fun pagedDetails(
+        path: String, token: String?, pageSize: Int, maxPages: Int,
+        objectField: String? = null
+    ): List<JSONObject> = collectBoundedGitHubPages(pageSize, maxPages) { page ->
+        val raw = http.get(gitHubPagedPath(path, pageSize, page), token)
+        val array = if (objectField == null) JSONArray(raw)
+            else JSONObject(raw).optJSONArray(objectField) ?: JSONArray()
+        (0 until array.length()).map { array.getJSONObject(it) }
+    }
+
+    /** On-demand PR history: at most 150 conversation and 150 review comments. */
     suspend fun pullDiscussion(pr: PullRequestItem, token: String?): List<DiscussionEntry> {
         val root = "/repos/" + enc(pr.owner) + "/" + enc(pr.repo)
-        val issue = JSONArray(http.get(root + "/issues/" + pr.number + "/comments?per_page=50", token))
-        val review = JSONArray(http.get(root + "/pulls/" + pr.number + "/comments?per_page=50", token))
-        val conversation = (0 until issue.length()).map { index ->
-            val value = issue.getJSONObject(index)
+        val issue = pagedDetails(root + "/issues/" + pr.number + "/comments", token, 50, 3)
+        val review = pagedDetails(root + "/pulls/" + pr.number + "/comments", token, 50, 3)
+        val conversation = issue.map { value ->
             DiscussionEntry(
                 id = value.getLong("id"),
                 kind = DiscussionKind.CONVERSATION,
@@ -543,8 +556,7 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
                 htmlUrl = value.optString("html_url")
             )
         }
-        val inline = (0 until review.length()).map { index ->
-            val value = review.getJSONObject(index)
+        val inline = review.map { value ->
             DiscussionEntry(
                 id = value.getLong("id"),
                 kind = DiscussionKind.INLINE_REVIEW,
@@ -565,24 +577,23 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
             JSONObject().put("body", validateDiscussionDraft(rawBody)))
     }
 
+    /** Fetch up to 120 changed files; keep each patch bounded for the mobile renderer. */
     suspend fun pullFiles(pr: PullRequestItem, token: String?): List<PullRequestFile> {
         val path = "/repos/" + enc(pr.owner) + "/" + enc(pr.repo) +
-            "/pulls/" + pr.number + "/files?per_page=30"
-        val array = JSONArray(http.get(path, token))
-        return (0 until array.length()).map {
-            val file = array.getJSONObject(it)
+            "/pulls/" + pr.number + "/files"
+        return pagedDetails(path, token, 30, 4).map { file ->
             PullRequestFile(file.optString("filename"),
                 file.optString("status"), file.optString("patch", "Diff unavailable for this file").take(12000))
         }
     }
 
+    /** Two pages are enough for a useful mobile job summary without unbounded crawling. */
     suspend fun workflowJobs(run: WorkflowRunItem, token: String?): List<WorkflowStep> {
         val path = "/repos/" + enc(run.owner) + "/" + enc(run.repo) +
-            "/actions/runs/" + run.id + "/jobs?per_page=100"
-        val array = JSONObject(http.get(path, token)).optJSONArray("jobs") ?: JSONArray()
-        return (0 until array.length()).map {
-            val item = array.getJSONObject(it)
-            WorkflowStep(item.optString("name"), parseStatus(item.optString("status"), item.optString("conclusion")), item.optLong("id"))
+            "/actions/runs/" + run.id + "/jobs"
+        return pagedDetails(path, token, 100, 2, objectField = "jobs").map { item ->
+            WorkflowStep(item.optString("name"),
+                parseStatus(item.optString("status"), item.optString("conclusion")), item.optLong("id"))
         }
     }
 
@@ -737,19 +748,24 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
         )
     }
 
+    /** Show at most 60 recent commits for the selected branch on demand. */
     suspend fun commitsForBranch(repo: RepositoryItem, branch: String, token: String?): List<CommitItem> {
-        val path = "/repos/" + enc(repo.owner) + "/" + enc(repo.name) +
-            "/commits?sha=" + enc(branch) + "&per_page=12"
-        val array = JSONArray(http.get(path, token))
-        return (0 until array.length()).map { i ->
-            val item = array.getJSONObject(i)
-            val details = item.getJSONObject("commit")
-            val sha = item.getString("sha")
-            val author = item.optJSONObject("author")?.optString("login").orEmpty()
-                .ifBlank { details.optJSONObject("author")?.optString("name").orEmpty() }
-            CommitItem(sha.take(8), details.optString("message").lineSequence().firstOrNull().orEmpty(),
-                author, details.optJSONObject("author")?.optString("date").orEmpty().take(10),
-                -1, 0, 0, sha)
+        require(validGitRefName(branch)) { "Invalid branch reference." }
+        val path = "/repos/" + enc(repo.owner) + "/" + enc(repo.name) + "/commits"
+        return collectBoundedGitHubPages(pageSize = 20, maxPages = 3) { page ->
+            val route = gitHubPagedPath(path, 20, page) + "&sha=" + enc(branch)
+            val array = JSONArray(http.get(route, token))
+            (0 until array.length()).map { i ->
+                val item = array.getJSONObject(i)
+                val details = item.getJSONObject("commit")
+                val sha = item.getString("sha")
+                val author = item.optJSONObject("author")?.optString("login").orEmpty()
+                    .ifBlank { details.optJSONObject("author")?.optString("name").orEmpty() }
+                CommitItem(sha.take(8),
+                    details.optString("message").lineSequence().firstOrNull().orEmpty(),
+                    author, details.optJSONObject("author")?.optString("date").orEmpty().take(10),
+                    -1, 0, 0, sha)
+            }
         }
     }
 
