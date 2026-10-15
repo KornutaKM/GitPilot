@@ -113,24 +113,24 @@ public enum OAuthValidation {
 }
 
 public enum OAuthConfiguration {
-    static var clientID: String? {
+    public static var clientID: String? {
         guard let value = Bundle.main.object(forInfoDictionaryKey: "GitPilotOAuthClientID") as? String,
               value.hasPrefix("Iv") || value.hasPrefix("Ov") else { return nil }
         return value
     }
 
-    static var backendURL: URL? {
+    public static var backendURL: URL? {
         guard let raw = Bundle.main.object(forInfoDictionaryKey: "GitPilotOAuthBackendURL") as? String,
               let url = URL(string: raw), url.scheme == "https", url.host != "example.com",
               url.user == nil, url.password == nil, url.query == nil, url.fragment == nil else { return nil }
         return url
     }
 
-    static var callbackURL: URL? {
+    public static var callbackURL: URL? {
         guard let raw = Bundle.main.object(forInfoDictionaryKey: "GitPilotOAuthCallbackURL") as? String,
               let url = URL(string: raw), OAuthValidation.validCallbackURL(url) else { return nil }
         return url
     }
 
-    static var isConfigured: Bool { clientID != nil && backendURL != nil && callbackURL != nil }
+    public static var isConfigured: Bool { clientID != nil && backendURL != nil && callbackURL != nil }
 }
