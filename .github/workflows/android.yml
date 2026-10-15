@@ -19,6 +19,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Validate release signing gates
+        run: bash scripts/test_release_gates.sh
       - name: Install Android SDK 36
         shell: bash
         run: |
@@ -28,7 +30,9 @@ jobs:
           "$SDKMANAGER" --install 'platforms;android-36' 'build-tools;35.0.0'
       - uses: gradle/actions/setup-gradle@v6
       - name: Unit tests, Android lint and debug APK
-        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug bundleRelease -Pgitpilot.githubClientId="${{ vars.GITPILOT_GITHUB_CLIENT_ID }}"
+        env:
+          GITPILOT_GITHUB_CLIENT_ID: ${{ vars.GITPILOT_GITHUB_CLIENT_ID }}
+        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug bundleRelease "-Pgitpilot.githubClientId=${GITPILOT_GITHUB_CLIENT_ID}"
       - uses: actions/upload-artifact@v7
         if: always()
         with:
