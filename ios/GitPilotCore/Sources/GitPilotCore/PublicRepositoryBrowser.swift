@@ -50,10 +50,10 @@ public extension PublicGitHubAPI {
               !ref.contains("//"), !ref.hasPrefix("-"), !ref.hasPrefix("."),
               !ref.hasSuffix("."), !ref.hasSuffix("/"), !ref.hasSuffix(".lock"),
               !ref.contains("@{") else { return false }
-        return ref.allSatisfy {
-            $0.isASCII || $0 == "-" || $0 == "/" || $0 == "_" || $0 == "."
-        } && ref.allSatisfy {
-            $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." || $0 == "/"
+        return ref.utf8.allSatisfy { byte in
+            (65...90).contains(Int(byte)) || (97...122).contains(Int(byte)) ||
+            (48...57).contains(Int(byte)) || byte == 45 || byte == 95 ||
+            byte == 46 || byte == 47
         }
     }
 
