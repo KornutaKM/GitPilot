@@ -1,0 +1,16 @@
+name = "gitpilot-auth"
+main = "src/worker.mjs"
+compatibility_date = "2026-10-01"
+workers_dev = false
+
+# Deploy on your own HTTPS hostname. Do not use the public workers.dev domain.
+# Bind GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET and GITHUB_CALLBACK_URI as server-only secrets.
+# The GitHub App callback URI must match the deployed /oauth/callback exactly.
+# Do not commit credentials, production domain-association JSON or signing details.
+
+[[ratelimits]]
+name = "AUTH_RATE_LIMIT"
+namespace_id = "1001"
+[ratelimits.simple]
+limit = 15
+period = 60
