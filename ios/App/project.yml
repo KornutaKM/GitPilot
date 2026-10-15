@@ -28,11 +28,30 @@ targets:
         INFOPLIST_KEY_GitPilotOAuthClientID: "$(GITPILOT_OAUTH_CLIENT_ID)"
         INFOPLIST_KEY_GitPilotOAuthBackendURL: "$(GITPILOT_OAUTH_BACKEND_URL)"
         INFOPLIST_KEY_GitPilotOAuthCallbackURL: "$(GITPILOT_OAUTH_CALLBACK_URL)"
+  GitPilotCoreSmokeTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: '16.0'
+    sources:
+      - path: Tests
+    dependencies:
+      - target: GitPilotCoreSmoke
+    settings:
+      base:
+        SWIFT_VERSION: '5.9'
+        PRODUCT_BUNDLE_IDENTIFIER: dev.gitpilot.core.smoke.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/GitPilotCoreSmoke.app/GitPilotCoreSmoke"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        CODE_SIGNING_ALLOWED: NO
 schemes:
   GitPilotCoreSmoke:
     build:
       targets:
         GitPilotCoreSmoke: all
+    test:
+      targets:
+        - GitPilotCoreSmokeTests
     run:
       config: Debug
     archive:
