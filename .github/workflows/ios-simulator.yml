@@ -46,6 +46,24 @@ jobs:
           find "$APP" -name 'PrivacyInfo.xcprivacy' | grep -q .
           cd "$RUNNER_TEMP/GitPilotCoreSmokeDerived/Build/Products/Debug-iphonesimulator"
           ditto -c -k --keepParent GitPilotCoreSmoke.app "$RUNNER_TEMP/GitPilotCoreSmoke-unsigned-simulator.zip"
+      - name: Run Keychain and AES-GCM vault XCTest on booted simulator
+        shell: bash
+        run: |
+          DEVICE_ID="$(xcrun simctl list devices available --json | python3 -c '
+          import json,sys
+          root=json.load(sys.stdin)
+          devices=[d for group in root.get("devices",{}).values() for d in group
+                   if d.get("isAvailable",False) and d.get("name","").startswith("iPhone")]
+          if not devices: sys.exit("No available iPhone Simulator runtime in Xcode")
+          print(devices[0]["udid"])')"
+          xcodebuild test \
+            -project ios/App/GitPilotCoreSmoke.xcodeproj \
+            -scheme GitPilotCoreSmoke \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=$DEVICE_ID" \
+            -derivedDataPath "$RUNNER_TEMP/GitPilotCoreSmokeDerived" \
+            -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO
       - name: Upload unsigned iOS simulator smoke host
         if: success()
         uses: actions/upload-artifact@v7
