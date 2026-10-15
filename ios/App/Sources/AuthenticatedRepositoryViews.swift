@@ -40,22 +40,14 @@ struct AuthenticatedRepositoriesScreen: View {
                         }
                     }
                     ForEach(items) { repo in
-                        Surface {
-                            HStack {
-                                GPIndicator(icon: repo.privateRepository ? "lock.fill" : "folder",
-                                            tint: repo.privateRepository ? GP.amber : GP.accent)
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Text(repo.fullName).font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(.white)
-                                    Text(repo.privateRepository ? "Private · read-only" : "Public · read-only")
-                                        .font(.caption).foregroundStyle(GP.secondary)
-                                }
-                                Spacer(minLength: 4)
-                            }
-                            if let url = PublicGitHubAPI.safeGitHubWebURL(repo.htmlURL) {
-                                Link("Open on GitHub", destination: url)
-                                    .font(.caption.weight(.semibold))
-                            }
+                        if PublicGitHubAPI.validBranchRef(repo.defaultBranch) {
+                            NavigationLink {
+                                AuthenticatedDirectoryScreen(
+                                    repository: repo, branch: repo.defaultBranch, path: "")
+                            } label: { repositoryRow(repo, canBrowse: true) }
+                                .buttonStyle(.plain)
+                        } else {
+                            repositoryRow(repo, canBrowse: false)
                         }
                     }
                     if hasMore {
@@ -85,6 +77,26 @@ struct AuthenticatedRepositoriesScreen: View {
         .onChange(of: account.authenticatedAs) { _ in clear() }
         .onDisappear { clear() }
         .refreshable { await reload() }
+    }
+
+    private func repositoryRow(_ repo: PublicRepository, canBrowse: Bool) -> some View {
+        Surface {
+            HStack {
+                GPIndicator(icon: repo.privateRepository ? "lock.fill" : "folder",
+                            tint: repo.privateRepository ? GP.amber : GP.accent)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(repo.fullName).font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                    Text(repo.privateRepository ? "Private · read-only" : "Public · read-only")
+                        .font(.caption).foregroundStyle(GP.secondary)
+                }
+                Spacer(minLength: 4)
+                if canBrowse {
+                    Image(systemName: "chevron.right").foregroundStyle(GP.secondary)
+                        .accessibilityHidden(true)
+                }
+            }
+        }
     }
 
     @MainActor
