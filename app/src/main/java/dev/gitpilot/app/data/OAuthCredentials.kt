@@ -15,4 +15,10 @@ data class OAuthCredentials(
 
     fun refreshUsable(nowMs: Long): Boolean =
         !refreshToken.isNullOrBlank() && nowMs < refreshExpiresAtMs - 60_000L
+
+    /** Prevent accidental leakage through logs, exceptions or state snapshots. */
+    override fun toString(): String = "OAuthCredentials(accessToken=<redacted>, " +
+        "accessExpiresAtMs=$accessExpiresAtMs, refreshToken=" +
+        (if (refreshToken == null) "null" else "<redacted>") +
+        ", refreshExpiresAtMs=$refreshExpiresAtMs)"
 }

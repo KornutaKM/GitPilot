@@ -89,4 +89,46 @@ class GitHubDomainTest {
     @Test fun unknownDoesNotMeanSuccessful() {
         assertNotEquals(CheckStatus.SUCCESS, CheckStatus.UNKNOWN)
     }
+
+    @Test fun oauthCredentialsRejectMalformedAndOversizedTokens() {
+        assertEquals("ghu_sample", checkedOAuthToken("ghu_sample", "access token"))
+        assertEquals(null, checkedOAuthToken(null, "refresh token", required = false))
+        assertEquals(null, checkedOAuthToken("null", "refresh token", required = false))
+        assertTrue(runCatching { checkedOAuthToken("", "access token") }.exceptionOrNull() is java.io.IOException)
+        assertTrue(runCatching { checkedOAuthToken("ghu bad", "access token") }.exceptionOrNull() is java.io.IOException)
+        assertTrue(runCatching { checkedOAuthToken("ghu\nbad", "access token") }.exceptionOrNull() is java.io.IOException)
+        assertTrue(runCatching { checkedOAuthToken("x".repeat(4097), "access token") }.exceptionOrNull() is java.io.IOException)
+        assertEquals("x".repeat(4096), checkedOAuthToken("x".repeat(4096), "access token"))
+    }
+
+    @Test fun deviceCodeAndOAuthResultDoNotPrintSecrets() {
+        val device = GitHubDeviceCode("sensitive-device-code", "sensitive-user-code",
+            "https://github.com/login/device", 900, 5)
+        assertFalse(device.toString().contains("sensitive-device-code"))
+        assertFalse(device.toString().contains("sensitive-user-code"))
+        val result = PollResult.Authorized("sensitive-access", 3600, "sensitive-refresh", 7200)
+        assertFalse(result.toString().contains("sensitive-access"))
+        assertFalse(result.toString().contains("sensitive-refresh"))
+        assertTrue(result.toString().contains("<redacted>"))
+    }
+
+    @Test fun permanentOAuthFailuresAreDistinguishedFromTemporaryFailures() {
+        assertTrue(isPermanentRefreshFailure("bad_refresh_token"))
+        assertTrue(isPermanentRefreshFailure("invalid_grant"))
+        assertTrue(isPermanentRefreshFailure("expired_token"))
+        assertFalse(isPermanentRefreshFailure("temporarily_unavailable"))
+        assertFalse(isPermanentRefreshFailure("authorization_pending"))
+        assertFalse(GitHubOAuthException("invalid_grant").message.orEmpty().contains("token-value"))
+    }
+
+    @Test fun parallelWorkspaceAppendDoesNotLoseResults() {
+        val entries = synchronizedWorkspaceList<Int>()
+        val workers = (0 until 8).map { worker ->
+            Thread { repeat(500) { entries.add(worker * 500 + it) } }
+        }
+        workers.forEach { it.start() }
+        workers.forEach { it.join() }
+        assertEquals(4_000, entries.size)
+        assertEquals(4_000, entries.toSet().size)
+    }
 }

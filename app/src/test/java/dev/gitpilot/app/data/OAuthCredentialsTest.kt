@@ -30,4 +30,15 @@ class OAuthCredentialsTest {
         val credentials = OAuthCredentials("legacy_access", Long.MAX_VALUE, null, 0)
         assertTrue(credentials.accessUsable(System.currentTimeMillis()))
     }
+
+    @Test fun credentialToStringNeverContainsTokenValues() {
+        val session = OAuthCredentials("very-secret-access", Long.MAX_VALUE,
+            "very-secret-refresh", Long.MAX_VALUE)
+        val shown = session.toString()
+        assertFalse(shown.contains("very-secret-access"))
+        assertFalse(shown.contains("very-secret-refresh"))
+        assertTrue(shown.contains("<redacted>"))
+        val legacy = OAuthCredentials("legacy-sensitive", Long.MAX_VALUE, null, 0)
+        assertFalse(legacy.toString().contains("legacy-sensitive"))
+    }
 }

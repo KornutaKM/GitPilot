@@ -17,6 +17,35 @@ import java.net.URLEncoder
 
 class GitHubApiException(val statusCode: Int, message: String, val rateLimited: Boolean = false) : IOException(message)
 
+/** OAuth failures are typed so only revoked credentials trigger local session deletion. */
+class GitHubOAuthException(val oauthCode: String) : IOException(when (oauthCode) {
+    "access_denied" -> "GitHub authorization was denied."
+    "expired_token", "bad_verification_code" -> "GitHub authorization expired. Please reconnect."
+    "bad_refresh_token", "invalid_grant" -> "GitHub session expired. Sign in again."
+    "incorrect_client_credentials" -> "GitHub App client configuration was rejected."
+    else -> "GitHub OAuth request failed."
+})
+
+internal fun isPermanentRefreshFailure(code: String): Boolean =
+    code in setOf("bad_refresh_token", "invalid_grant", "expired_token")
+
+/** Never accept JSON null, blank, whitespace-containing or oversized OAuth credentials. */
+internal fun checkedOAuthToken(raw: String?, field: String, required: Boolean = true): String? {
+    val value = raw?.takeUnless { it.isEmpty() || it == "null" }
+    if (value == null) {
+        if (required) throw IOException("GitHub did not return a valid " + field)
+        return null
+    }
+    if (value.length > 4096 || value.any { it.isWhitespace() || it.isISOControl() }) {
+        throw IOException("GitHub returned an invalid " + field)
+    }
+    return value
+}
+
+/** Bounded refreshes append results from multiple coroutines on different threads. */
+internal fun <T> synchronizedWorkspaceList(): MutableList<T> =
+    java.util.Collections.synchronizedList(mutableListOf<T>())
+
 private fun enc(part: String): String = URLEncoder.encode(part, "UTF-8").replace("+", "%20")
 
 /** Bounded response decoding protects the UI from oversized GitHub/error payloads. */
@@ -176,20 +205,31 @@ class GitHubHttp {
 data class GitHubDeviceCode(
     val deviceCode: String, val userCode: String, val verificationUri: String,
     val expiresInSeconds: Long, val intervalSeconds: Long
-)
+) {
+    // GitPilotState includes this object: never expose live authorization codes in a state dump.
+    override fun toString(): String =
+        "GitHubDeviceCode(deviceCode=<redacted>, userCode=<redacted>, " +
+            "verificationUri=$verificationUri, expiresInSeconds=$expiresInSeconds, " +
+            "intervalSeconds=$intervalSeconds)"
+}
 sealed interface PollResult {
     data object Pending : PollResult
     data class SlowDown(val intervalSeconds: Long) : PollResult
     data class Authorized(
         val accessToken: String, val expiresInSeconds: Long?,
         val refreshToken: String? = null, val refreshExpiresInSeconds: Long? = null
-    ) : PollResult
+    ) : PollResult {
+        override fun toString(): String = "Authorized(accessToken=<redacted>, " +
+            "expiresInSeconds=$expiresInSeconds, refreshToken=" +
+            (if (refreshToken == null) "null" else "<redacted>") +
+            ", refreshExpiresInSeconds=$refreshExpiresInSeconds)"
+    }
 }
 
 class GitHubDeviceAuth(private val http: GitHubHttp = GitHubHttp()) {
     suspend fun begin(clientId: String): GitHubDeviceCode {
         val json = http.oauth("/login/device/code", mapOf("client_id" to clientId))
-        if (json.has("error")) throw IOException(json.optString("error_description", json.optString("error")))
+        if (json.has("error") && !json.isNull("error")) throw GitHubOAuthException(json.optString("error"))
         return GitHubDeviceCode(
             json.getString("device_code"), json.getString("user_code"),
             json.getString("verification_uri"), json.optLong("expires_in", 900),
@@ -205,18 +245,17 @@ class GitHubDeviceAuth(private val http: GitHubHttp = GitHubHttp()) {
         ))
         return when (json.optString("error")) {
             "" -> {
-                val token = json.optString("access_token")
-                if (token.isBlank()) throw IOException("GitHub did not return an access token")
+                val token = checkedOAuthToken(json.optString("access_token"), "access token")!!
                 PollResult.Authorized(
                     token,
                     if (json.has("expires_in")) json.optLong("expires_in") else null,
-                    json.optString("refresh_token").takeIf { it.isNotBlank() },
+                    checkedOAuthToken(json.optString("refresh_token"), "refresh token", required = false),
                     if (json.has("refresh_token_expires_in")) json.optLong("refresh_token_expires_in") else null
                 )
             }
             "authorization_pending" -> PollResult.Pending
             "slow_down" -> PollResult.SlowDown(json.optLong("interval", code.intervalSeconds + 5))
-            else -> throw IOException(json.optString("error_description", json.optString("error")))
+            else -> throw GitHubOAuthException(json.optString("error"))
         }
     }
     suspend fun renew(clientId: String, refreshToken: String): PollResult.Authorized {
@@ -226,15 +265,14 @@ class GitHubDeviceAuth(private val http: GitHubHttp = GitHubHttp()) {
             "refresh_token" to refreshToken
         ))
         val error = json.optString("error")
-        if (error.isNotBlank()) {
-            throw IOException(json.optString("error_description", error))
+        if (error.isNotBlank() && error != "null") {
+            throw GitHubOAuthException(error)
         }
-        val token = json.optString("access_token")
-        if (token.isBlank()) throw IOException("GitHub did not provide renewed access credentials")
+        val token = checkedOAuthToken(json.optString("access_token"), "access token")!!
         return PollResult.Authorized(
             token,
             if (json.has("expires_in")) json.optLong("expires_in") else null,
-            json.optString("refresh_token").takeIf { it.isNotBlank() },
+            checkedOAuthToken(json.optString("refresh_token"), "refresh token", required = false),
             if (json.has("refresh_token_expires_in")) json.optLong("refresh_token_expires_in") else null
         )
     }
@@ -301,7 +339,7 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
         val route = repoListPath(username, signedIn, 1)
         val repos = JSONArray(http.get(route, token))
         val entries = (0 until repos.length()).map { repos.getJSONObject(it) }
-        val warnings = mutableListOf<String>()
+        val warnings = synchronizedWorkspaceList<String>()
         val recent = entries.map { json ->
             val item = repositoryFromJson(json)
             item.copy(starred = (item.owner + "/" + item.name).lowercase() in pinned)
@@ -323,10 +361,10 @@ class LiveGitHubWorkspace(private val http: GitHubHttp = GitHubHttp()) {
             }
         }
         val all = prioritizeRepositories((recent + pinnedExtras).distinctBy { it.id })
-        val branches = mutableMapOf<Long, List<BranchItem>>()
-        val commits = mutableMapOf<Long, List<CommitItem>>()
-        val prs = mutableListOf<PullRequestItem>()
-        val runs = mutableListOf<WorkflowRunItem>()
+        val branches = java.util.concurrent.ConcurrentHashMap<Long, List<BranchItem>>()
+        val commits = java.util.concurrent.ConcurrentHashMap<Long, List<CommitItem>>()
+        val prs = synchronizedWorkspaceList<PullRequestItem>()
+        val runs = synchronizedWorkspaceList<WorkflowRunItem>()
         
         // Limit requests in anonymous mode (60 requests/hour shared by IP).
         val monitored = all.take(if (signedIn) 8 else 4)
