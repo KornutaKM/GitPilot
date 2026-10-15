@@ -3,6 +3,7 @@ import GitPilotCore
 
 struct PublicWorkspaceRoot: View {
     @StateObject private var store = PublicWorkspaceStore()
+    @StateObject private var account = OAuthAccountSession()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -18,6 +19,7 @@ struct PublicWorkspaceRoot: View {
                     .tabItem { Label("Repos", systemImage: "square.stack.3d.up.fill") }
             }
             .tint(GP.accent)
+            .environmentObject(account)
 
             // Mirror RC3's app-switcher privacy cover; future OAuth/private
             // views must not remain readable in app switcher snapshots.
@@ -34,7 +36,10 @@ struct PublicWorkspaceRoot: View {
             }
         }
         .preferredColorScheme(.dark)
-        .task { if !store.hasLoaded && !store.isLoading { store.refresh() } }
+        .task {
+            account.restoreOnce()
+            if !store.hasLoaded && !store.isLoading { store.refresh() }
+        }
     }
 }
 
@@ -376,6 +381,7 @@ private struct SafeGitHubLink: View {
 
 private struct ProfileEditor: View {
     @ObservedObject var store: PublicWorkspaceStore
+    @EnvironmentObject private var account: OAuthAccountSession
     @Environment(\.dismiss) private var dismiss
     @State private var draft = ""
     var body: some View {
@@ -388,6 +394,34 @@ private struct ProfileEditor: View {
                         .submitLabel(.done)
                     Text("Only public repositories are visible. No authentication tokens are saved.")
                         .font(.footnote).foregroundStyle(.secondary)
+                }
+                Section("GitHub App OAuth (read-only preview)") {
+                    if let login = account.authenticatedAs {
+                        Label("Connected as @\(login)", systemImage: "checkmark.shield.fill")
+                            .foregroundStyle(.green)
+                        Text("Only account verification is authenticated. Repository browsing, PR reviews, merges and Actions writes remain disabled.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                        Button("Sign out and erase local draft key", role: .destructive) {
+                            account.signOut()
+                        }
+                        .disabled(account.busy)
+                    } else if account.isConfigured {
+                        Text("Uses GitHub App OAuth with PKCE, an operator-controlled HTTPS gateway and device-only Keychain.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                        Button {
+                            account.signIn()
+                        } label: {
+                            if account.busy { ProgressView("Connecting…") }
+                            else { Label("Connect GitHub App", systemImage: "lock.shield") }
+                        }
+                        .disabled(account.busy)
+                    } else {
+                        Text("OAuth is disabled in this build. Configure a GitHub App, HTTPS gateway and verified Universal Link callback; iOS 17.4+ is required.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                    if let error = account.errorMessage {
+                        Text(error).font(.footnote).foregroundStyle(.orange)
+                    }
                 }
                 Section {
                     Button("Browse public projects") {
