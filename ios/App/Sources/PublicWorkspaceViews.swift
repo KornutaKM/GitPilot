@@ -324,9 +324,32 @@ private struct RepositoryDetailsScreen: View {
                     MetaText(text: "Stars: \(repository.stargazersCount)")
                     SafeGitHubLink(title: "Open repository on GitHub", url: repository.htmlURL)
                 }
+                if PublicGitHubAPI.validBranchRef(repository.defaultBranch) {
+                    NavigationLink {
+                        PublicDirectoryScreen(repository: repository,
+                                              branch: repository.defaultBranch, path: "")
+                    } label: {
+                        Surface {
+                            Label("Browse public files", systemImage: "folder.fill")
+                                .foregroundStyle(.white)
+                            MetaText(text: "Folders and small UTF-8 file previews")
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    NavigationLink {
+                        PublicCommitsScreen(repository: repository, branch: repository.defaultBranch)
+                    } label: {
+                        Surface {
+                            Label("Recent commits", systemImage: "point.3.connected.trianglepath.dotted")
+                                .foregroundStyle(.white)
+                            MetaText(text: "Up to 12 latest commits on the default branch")
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
                 GPEmptyState(icon: "lock.shield",
                              title: "Read-only integration milestone",
-                             detail: "Branch browsing, authenticated files and remote commits will be enabled only after the RC3 Keychain/OAuth migration.")
+                             detail: "Authenticated repositories, staging and remote commits remain disabled until the RC3 Keychain/OAuth migration.")
             }
             .padding(20)
         }
