@@ -80,7 +80,7 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         session.clear()
         // Repository names may themselves be confidential. Clear locally pinned
         // identifiers when credentials are revoked or the user explicitly signs out.
-        preferences.edit().remove("pinned_repositories").apply()
+        preferences.edit().remove("pinned_repositories").commit()
         mutable.update {
             it.copy(
                 authenticatedAs = null, error = null, message = null,
@@ -110,7 +110,16 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
             return@withLock null
         }
         val epoch = authEpoch
-        val renewed = deviceAuth.renew(clientId, saved.refreshToken!!)
+        val renewed = try {
+            deviceAuth.renew(clientId, saved.refreshToken!!)
+        } catch (e: GitHubOAuthException) {
+            // A network outage must not destroy a recoverable session, but GitHub's
+            // explicit revocation/expiry response makes existing credentials unusable.
+            if (isPermanentRefreshFailure(e.oauthCode) && epoch == authEpoch) {
+                invalidateSession()
+            }
+            throw e
+        }
         if (epoch != authEpoch) return@withLock null
         session.save(renewed.accessToken, renewed.expiresInSeconds,
             renewed.refreshToken, renewed.refreshExpiresInSeconds)
