@@ -9,8 +9,9 @@ The GitHub Android 1.3-alpha implementation and the independently developed iOS/
 - trusted GitHub API origins, authorization-free external redirects, constrained pagination continuation;
 - unified pull-request diffs and LEFT/RIGHT review line indexing;
 - bounded staged diff previews with safeguards against oversized input/output.
+- RC3 staged-draft envelopes: account isolation, 12-file/1-MB aggregate limits, per-file limits and redaction of uncommitted source in diagnostics.
 
-The logic is intentionally headless and has no GitHub network or account access in CI. The package includes 11 XCTest regressions. Build and run locally on macOS or Linux:
+The logic is intentionally headless and has no GitHub network or account access in CI. The package includes 16 XCTest regressions. Build and run locally on macOS or Linux:
 
 ```bash
 swift build --package-path ios/GitPilotCore --configuration release
@@ -36,7 +37,7 @@ xcodebuild build -project ios/App/GitPilotCoreSmoke.xcodeproj -scheme GitPilotCo
 
 ## Remaining migration and release gates
 
-**Not yet migrated into this GitHub repository:** the full RC3 SwiftUI app, its Core models/network stack, production Xcode project, app assets, Keychain and OAuth flow, Cloudflare OAuth gateway, and feature screens. The simulator smoke host is not a replacement for these. The pre-existing RC3 archive includes those sources; it has not passed a native Xcode build and must be integrated and verified before TestFlight. Mac Swift Package tests are a foundation check, **not** an iOS simulator build or an iPhone QA pass.
+**Not yet migrated into this GitHub repository:** the full RC3 SwiftUI app, its Core models/network stack, production Xcode project, app assets, actual Keychain-backed staged-draft encryption vault and OAuth flow, Cloudflare OAuth gateway, and feature screens. The simulator smoke host is not a replacement for these. The pre-existing RC3 archive includes those sources; it has not passed a native Xcode build and must be integrated and verified before TestFlight. Mac Swift Package tests are a foundation check, **not** an iOS simulator build or an iPhone QA pass.
 
 After source integration, run `xcodebuild build` on macOS with iOS 26 SDK against a signing-disabled simulator destination, add on-simulator tests, verify the privacy manifest and entitlements, then complete the actual publisher signing/TestFlight evidence. Do not put OAuth client secrets, signing certificates or tokens into source control.
 
