@@ -1,45 +1,82 @@
 import Foundation
 
 /// The native client never contains a GitHub App client secret.
-struct OAuthCredentials: Codable, Equatable, CustomStringConvertible, CustomDebugStringConvertible {
-    let accessToken: String
-    let accessExpiresAt: Date?
-    let refreshToken: String?
-    let refreshExpiresAt: Date?
+public struct OAuthCredentials: Codable, Equatable, CustomStringConvertible, CustomDebugStringConvertible {
+    public let accessToken: String
+    public let accessExpiresAt: Date?
+    public let refreshToken: String?
+    public let refreshExpiresAt: Date?
+
+
+    public init(accessToken: String, accessExpiresAt: Date?,
+                refreshToken: String?, refreshExpiresAt: Date?) {
+        self.accessToken = accessToken
+        self.accessExpiresAt = accessExpiresAt
+        self.refreshToken = refreshToken
+        self.refreshExpiresAt = refreshExpiresAt
+    }
 
     /// Do not include bearer or refresh tokens in logs, diagnostics or app state dumps.
-    var description: String {
+    public var description: String {
         "OAuthCredentials(accessToken=<redacted>, refreshToken=" +
         (refreshToken == nil ? "nil" : "<redacted>") + ")"
     }
-    var debugDescription: String { description }
+    public var debugDescription: String { description }
 
-    var needsRefresh: Bool {
+    public var needsRefresh: Bool {
         guard let accessExpiresAt else { return false }
         return accessExpiresAt <= Date().addingTimeInterval(120)
     }
 
-    var canRefresh: Bool {
+    public var canRefresh: Bool {
         guard let refreshToken, !refreshToken.isEmpty else { return false }
         return refreshExpiresAt.map { $0 > Date().addingTimeInterval(30) } ?? true
     }
 }
 
-struct OAuthTokenPayload: Decodable, CustomStringConvertible, CustomDebugStringConvertible {
-    let accessToken: String
-    let expiresIn: TimeInterval?
-    let refreshToken: String?
-    let refreshTokenExpiresIn: TimeInterval?
+public struct OAuthTokenPayload: Decodable, CustomStringConvertible, CustomDebugStringConvertible {
+    public let accessToken: String
+    public let expiresIn: TimeInterval?
+    public let refreshToken: String?
+    public let refreshTokenExpiresIn: TimeInterval?
 
-    var description: String { "OAuthTokenPayload(accessToken=<redacted>, refreshToken=<redacted>)" }
-    var debugDescription: String { description }
+    public var description: String { "OAuthTokenPayload(accessToken=<redacted>, refreshToken=<redacted>)" }
+    public var debugDescription: String { description }
 
     enum CodingKeys: String, CodingKey {
         case accessToken = "access_token", expiresIn = "expires_in"
         case refreshToken = "refresh_token", refreshTokenExpiresIn = "refresh_token_expires_in"
     }
 
-    func credential(issuedAt: Date = Date()) -> OAuthCredentials {
+    public enum ValidationError: LocalizedError {
+        case malformedCredentials
+        public var errorDescription: String? { "OAuth gateway returned invalid credentials." }
+    }
+
+    /// Enforces a complete refresh-token rotation and bounded token lifetimes.
+    /// Reject before writing any data into Keychain.
+    public func validatedCredentials(issuedAt: Date = Date()) throws -> OAuthCredentials {
+        func valid(_ value: String?) -> Bool {
+            guard let value, !value.isEmpty && value.utf8.count <= 4096 else { return false }
+            return !value.unicodeScalars.contains { CharacterSet.whitespacesAndNewlines.contains($0) ||
+                CharacterSet.controlCharacters.contains($0) }
+        }
+        guard valid(accessToken), refreshToken == nil || valid(refreshToken) else {
+            throw ValidationError.malformedCredentials
+        }
+        for lifetime in [expiresIn, refreshTokenExpiresIn] {
+            if let lifetime, (!lifetime.isFinite || lifetime < 1 || lifetime > 315_360_000) {
+                throw ValidationError.malformedCredentials
+            }
+        }
+        guard (refreshToken == nil) == (refreshTokenExpiresIn == nil),
+              refreshToken == nil || expiresIn != nil else {
+            throw ValidationError.malformedCredentials
+        }
+        return credential(issuedAt: issuedAt)
+    }
+
+    public func credential(issuedAt: Date = Date()) -> OAuthCredentials {
         OAuthCredentials(accessToken: accessToken,
                          accessExpiresAt: expiresIn.map { issuedAt.addingTimeInterval($0) },
                          refreshToken: refreshToken,
@@ -47,10 +84,10 @@ struct OAuthTokenPayload: Decodable, CustomStringConvertible, CustomDebugStringC
     }
 }
 
-enum OAuthValidation {
+public enum OAuthValidation {
     /// The callback is an owned-domain Universal Link registered with the GitHub App.
     /// Exact origin and path matching prevents acceptance of lookalike hosts/paths.
-    static func code(from callback: URL, state: String, expectedCallback: URL) -> String? {
+    public static func code(from callback: URL, state: String, expectedCallback: URL) -> String? {
         guard validCallbackURL(expectedCallback),
               callback.scheme == "https", callback.host == expectedCallback.host,
               callback.path == expectedCallback.path, callback.port == nil,
@@ -65,7 +102,7 @@ enum OAuthValidation {
         return code
     }
 
-    static func validCallbackURL(_ url: URL) -> Bool {
+    public static func validCallbackURL(_ url: URL) -> Bool {
         guard let host = url.host?.lowercased() else { return false }
         return url.scheme == "https" && host.contains(".") &&
             host != "example.com" && !host.hasSuffix(".example") &&
@@ -75,7 +112,7 @@ enum OAuthValidation {
     }
 }
 
-enum OAuthConfiguration {
+public enum OAuthConfiguration {
     static var clientID: String? {
         guard let value = Bundle.main.object(forInfoDictionaryKey: "GitPilotOAuthClientID") as? String,
               value.hasPrefix("Iv") || value.hasPrefix("Ov") else { return nil }
