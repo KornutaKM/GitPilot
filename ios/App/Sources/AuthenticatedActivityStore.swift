@@ -43,6 +43,7 @@ final class AuthenticatedActivityPager<Item: Identifiable>: ObservableObject {
         let requestedPage = page
         loading = true
         errorMessage = nil
+        defer { if requestGeneration == generation { loading = false } }
         do {
             let token = try await account.tokenForProtectedRead()
             let sessionRevision = account.authRevision
@@ -69,6 +70,5 @@ final class AuthenticatedActivityPager<Item: Identifiable>: ObservableObject {
             errorMessage = error.localizedDescription
             loaded = true
         }
-        if generation == requestGeneration { loading = false }
     }
 }
