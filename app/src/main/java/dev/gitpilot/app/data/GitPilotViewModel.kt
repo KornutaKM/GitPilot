@@ -324,9 +324,9 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         val requestKey = "directory:$key"
         if (!detailRequestGate.begin(generation, requestKey)) return
         viewModelScope.launch {
-            if (!isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) return@launch
-            mutable.update { it.copy(loadingDirectoryKey = key, error = null) }
             try {
+                if (!isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) return@launch
+            mutable.update { it.copy(loadingDirectoryKey = key, error = null) }
                 val contents = service.listDirectory(repo, branch, path, currentToken())
                 if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update {
                     it.copy(directoryContents = it.directoryContents + (key to contents),
@@ -352,9 +352,9 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         val requestKey = "file:$key"
         if (!detailRequestGate.begin(generation, requestKey)) return
         viewModelScope.launch {
-            if (!isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) return@launch
-            mutable.update { it.copy(loadingFileKey = key, error = null) }
             try {
+                if (!isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) return@launch
+            mutable.update { it.copy(loadingFileKey = key, error = null) }
                 val preview = service.readFile(repo, branch, file, currentToken())
                 if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update {
                     it.copy(filePreviews = it.filePreviews + (key to preview),
@@ -381,9 +381,9 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         val requestKey = "comparison:$key"
         if (!detailRequestGate.begin(generation, requestKey)) return
         viewModelScope.launch {
-            if (!isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) return@launch
-            mutable.update { it.copy(loadingComparisonKey = key, error = null) }
             try {
+                if (!isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) return@launch
+            mutable.update { it.copy(loadingComparisonKey = key, error = null) }
                 val comparison = service.compareBranches(repo, branch, currentToken())
                 if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update {
                     it.copy(comparisons = it.comparisons + (key to comparison),
@@ -434,9 +434,9 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         val requestKey = "commit-files:$key"
         if (!detailRequestGate.begin(generation, requestKey)) return
         viewModelScope.launch {
-            if (!isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) return@launch
-            if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update { it.copy(detailLoading = true, error = null) }
             try {
+                if (!isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) return@launch
+            if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update { it.copy(detailLoading = true, error = null) }
                 val files = service.commitFiles(repo, commit, currentToken())
                 if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update { it.copy(commitFiles = it.commitFiles + (key to files), detailLoading = false) }
             } catch (e: Exception) {
@@ -509,9 +509,9 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         val requestKey = "job-log:${step.id}"
         if (!detailRequestGate.begin(generation, requestKey)) return
         viewModelScope.launch {
-            if (!isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) return@launch
-            if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update { it.copy(loadingJobId = step.id, error = null) }
             try {
+                if (!isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) return@launch
+            if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update { it.copy(loadingJobId = step.id, error = null) }
                 val text = service.fetchJobLog(run, step, currentToken())
                 if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update { it.copy(jobLogs = it.jobLogs + (step.id to text), loadingJobId = null) }
             } catch (e: Exception) {
@@ -654,9 +654,9 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         val requestKey = "definitions:${repo.id}"
         if (!detailRequestGate.begin(generation, requestKey)) return
         viewModelScope.launch {
-            if (!isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) return@launch
-            if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update { it.copy(loadingDefinitionsId = repo.id, error = null) }
             try {
+                if (!isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) return@launch
+            if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update { it.copy(loadingDefinitionsId = repo.id, error = null) }
                 val definitions = service.listWorkflows(repo, currentToken())
                 if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update { it.copy(
                     definitions = it.definitions + (repo.id to definitions),
