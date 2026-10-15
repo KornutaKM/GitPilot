@@ -74,8 +74,10 @@ class SecureTokenStore(context: Context) {
             if (data.startsWith("{")) {
                 val json = JSONObject(data)
                 require(json.optInt("version") == 2)
-                OAuthCredentials(json.getString("access"), json.getLong("access_expires_at"),
-                    json.optString("refresh").takeIf { it.isNotBlank() }, json.optLong("refresh_expires_at"))
+                val access = checkedOAuthToken(json.optString("access"), "stored access token")!!
+                val refresh = checkedOAuthToken(json.optString("refresh"), "stored refresh token", required = false)
+                OAuthCredentials(access, json.getLong("access_expires_at"),
+                    refresh, json.optLong("refresh_expires_at"))
             } else {
                 OAuthCredentials(data, prefs.getLong("expires_at", 0L), null, 0L)
             }
@@ -90,7 +92,8 @@ class SecureTokenStore(context: Context) {
     }?.accessToken
 
     fun clear() {
-        prefs.edit().clear().apply()
+        // Persist removal before sign-out returns; do not leave encrypted tokens on disk.
+        prefs.edit().clear().commit()
     }
 
     private fun expiration(now: Long, seconds: Long?): Long {
