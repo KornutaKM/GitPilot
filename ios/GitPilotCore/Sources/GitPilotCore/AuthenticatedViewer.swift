@@ -21,12 +21,16 @@ public struct GitHubAuthenticatedViewer {
     public typealias Transport = (URLRequest) async throws -> (Data, URLResponse)
     private let transport: Transport
 
-    public init(transport: @escaping Transport = { request in
-        let session = URLSession(configuration: .ephemeral,
-                                 delegate: DenyViewerRedirect(), delegateQueue: nil)
-        defer { session.invalidateAndCancel() }
-        return try await session.data(for: request)
-    }) {
+    public init() {
+        self.transport = { request in
+            let session = URLSession(configuration: .ephemeral,
+                                     delegate: DenyViewerRedirect(), delegateQueue: nil)
+            defer { session.invalidateAndCancel() }
+            return try await session.data(for: request)
+        }
+    }
+
+    public init(transport: @escaping Transport) {
         self.transport = transport
     }
 
