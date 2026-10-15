@@ -21,6 +21,13 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         TARGETED_DEVICE_FAMILY: '1,2'
         CODE_SIGNING_ALLOWED: NO
+        # Public identifiers/configuration only. NEVER pass the GitHub App client secret.
+        GITPILOT_OAUTH_CLIENT_ID: ''
+        GITPILOT_OAUTH_BACKEND_URL: ''
+        GITPILOT_OAUTH_CALLBACK_URL: ''
+        INFOPLIST_KEY_GitPilotOAuthClientID: "$(GITPILOT_OAUTH_CLIENT_ID)"
+        INFOPLIST_KEY_GitPilotOAuthBackendURL: "$(GITPILOT_OAUTH_BACKEND_URL)"
+        INFOPLIST_KEY_GitPilotOAuthCallbackURL: "$(GITPILOT_OAUTH_CALLBACK_URL)"
 schemes:
   GitPilotCoreSmoke:
     build:
