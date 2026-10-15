@@ -108,4 +108,36 @@ class GitHubPagingTest {
         assertTrue(runCatching { gitHubPagedPath("/repos/o/r", 30, 0) }.isFailure)
         assertTrue(runCatching { gitHubPagedPath("/repos/o/r", 30, 6) }.isFailure)
     }
+
+    @Test fun recompositionCannotStartTheSameDetailRequestTwice() {
+        val gate = GitHubDetailRequestGate()
+        assertTrue(gate.begin(1L, "pr-files:repo#7"))
+        assertFalse(gate.begin(1L, "pr-files:repo#7"))
+        assertTrue(gate.begin(1L, "jobs:12"))
+        gate.finish(1L, "pr-files:repo#7")
+        assertTrue(gate.begin(1L, "pr-files:repo#7"))
+    }
+
+    @Test fun olderRefreshCannotReleaseOrBlockNewGeneration() {
+        val gate = GitHubDetailRequestGate()
+        assertTrue(gate.begin(10L, "discussion:repo#7"))
+        assertTrue(gate.begin(11L, "discussion:repo#7"))
+        gate.finish(10L, "discussion:repo#7")
+        assertFalse(gate.begin(11L, "discussion:repo#7"))
+        gate.finish(11L, "discussion:repo#7")
+        assertTrue(gate.begin(11L, "discussion:repo#7"))
+    }
+
+    @Test fun concurrentDuplicateRequestsAcquireExactlyOneSlot() {
+        val gate = GitHubDetailRequestGate()
+        val accepted = java.util.Collections.synchronizedList(mutableListOf<Boolean>())
+        val workers = (1..16).map {
+            Thread { accepted.add(gate.begin(3L, "commits:main")) }
+        }
+        workers.forEach { it.start() }
+        workers.forEach { it.join() }
+        assertEquals(1, accepted.count { it })
+        gate.finish(3L, "commits:main")
+        assertTrue(gate.begin(3L, "commits:main"))
+    }
 }
