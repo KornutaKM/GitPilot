@@ -42,8 +42,7 @@ struct AuthenticatedRepositoriesScreen: View {
                     ForEach(items) { repo in
                         if PublicGitHubAPI.validBranchRef(repo.defaultBranch) {
                             NavigationLink {
-                                AuthenticatedDirectoryScreen(
-                                    repository: repo, branch: repo.defaultBranch, path: "")
+                                AuthenticatedRepositoryHubScreen(repository: repo)
                             } label: { repositoryRow(repo, canBrowse: true) }
                                 .buttonStyle(.plain)
                         } else {
