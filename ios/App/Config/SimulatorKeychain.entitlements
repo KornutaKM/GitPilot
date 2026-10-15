@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Development-only simulator access group. Production entitlements are
+         generated separately by Apple's signed provisioning profiles. -->
+    <key>application-identifier</key>
+    <string>dev.gitpilot.core.smoke</string>
+    <key>keychain-access-groups</key>
+    <array>
+        <string>dev.gitpilot.core.smoke</string>
+    </array>
+</dict>
+</plist>
