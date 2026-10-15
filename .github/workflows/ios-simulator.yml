@@ -1,0 +1,56 @@
+name: iOS Simulator Smoke
+
+on:
+  pull_request:
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-simulator.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ios-simulator-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  simulator-compile:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select iOS 26 SDK
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26'
+      - name: Report Xcode and verify simulator SDK
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks | grep -E 'iphonesimulator'
+      - name: Install project generator
+        run: brew install xcodegen
+      - name: Generate native iOS SwiftUI smoke-host project
+        run: xcodegen generate --spec ios/App/project.yml
+      - name: Compile unsigned iPhone Simulator app
+        shell: bash
+        run: |
+          xcodebuild build \
+            -project ios/App/GitPilotCoreSmoke.xcodeproj \
+            -scheme GitPilotCoreSmoke -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/GitPilotCoreSmokeDerived" \
+            CODE_SIGNING_ALLOWED=NO
+          APP="$RUNNER_TEMP/GitPilotCoreSmokeDerived/Build/Products/Debug-iphonesimulator/GitPilotCoreSmoke.app"
+          test -d "$APP"
+          find "$APP" -name 'PrivacyInfo.xcprivacy' | grep -q .
+          cd "$RUNNER_TEMP/GitPilotCoreSmokeDerived/Build/Products/Debug-iphonesimulator"
+          ditto -c -k --keepParent GitPilotCoreSmoke.app "$RUNNER_TEMP/GitPilotCoreSmoke-unsigned-simulator.zip"
+      - name: Upload unsigned iOS simulator smoke host
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: GitPilotCoreSmoke-iOS-simulator-UNSIGNED
+          path: ${{ runner.temp }}/GitPilotCoreSmoke-unsigned-simulator.zip
+          retention-days: 7
+          if-no-files-found: error
