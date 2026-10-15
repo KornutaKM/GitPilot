@@ -92,4 +92,62 @@ class DeviceFlowSecurityTest {
         assertFalse(dumped.contains(device.deviceCode))
         assertFalse(dumped.contains(device.userCode))
     }
+
+    @Test fun nonExpiringUserOAuthTokenRemainsSupported() {
+        val response = JSONObject().put("access_token", "ghu_sample")
+        val creds = decodeOAuthAuthorization(response)
+        assertEquals("ghu_sample", creds.accessToken)
+        assertEquals(null, creds.expiresInSeconds)
+        assertEquals(null, creds.refreshToken)
+        assertEquals(null, creds.refreshExpiresInSeconds)
+    }
+
+    @Test fun completeExpiringAndRenewedTokensAreAccepted() {
+        val response = JSONObject()
+            .put("access_token", "ghu_rotated")
+            .put("expires_in", 28_800)
+            .put("refresh_token", "ghr_rotated")
+            .put("refresh_token_expires_in", 15_897_600)
+        val creds = decodeOAuthAuthorization(response, requireRefresh = true)
+        assertEquals(28_800L, creds.expiresInSeconds)
+        assertEquals("ghr_rotated", creds.refreshToken)
+        assertEquals(15_897_600L, creds.refreshExpiresInSeconds)
+        assertFalse(creds.toString().contains("ghu_rotated"))
+        assertFalse(creds.toString().contains("ghr_rotated"))
+    }
+
+    @Test fun incompleteTokenRotationFailsBeforeReplacingTheStoredSession() {
+        val full = JSONObject()
+            .put("access_token", "ghu_rotated")
+            .put("expires_in", 28_800)
+            .put("refresh_token", "ghr_rotated")
+            .put("refresh_token_expires_in", 15_897_600)
+        val missing = listOf("expires_in", "refresh_token", "refresh_token_expires_in")
+        missing.forEach { field ->
+            val copy = JSONObject(full.toString())
+            copy.remove(field)
+            assertTrue("Unexpected success without $field", runCatching {
+                decodeOAuthAuthorization(copy, requireRefresh = true)
+            }.isFailure)
+        }
+        assertTrue(runCatching {
+            decodeOAuthAuthorization(JSONObject().put("access_token", "ghu_only"), requireRefresh = true)
+        }.isFailure)
+    }
+
+    @Test fun malformedOAuthTokenLifetimeIsRejected() {
+        listOf(0L, -2L, 315_360_001L, Long.MAX_VALUE).forEach { invalid ->
+            val value = JSONObject().put("access_token", "ghu_test")
+                .put("expires_in", invalid)
+            assertTrue(runCatching { decodeOAuthAuthorization(value) }.isFailure)
+        }
+    }
+
+    @Test fun oauthErrorTypesNeverEchoTheProviderDescription() {
+        val failure = GitHubOAuthException("invalid_grant")
+        assertFalse(failure.message.orEmpty().contains("refresh_token"))
+        assertTrue(failure.message.orEmpty().contains("expired"))
+        val unknown = GitHubOAuthException("custom-malicious-secret")
+        assertFalse(unknown.message.orEmpty().contains("custom-malicious-secret"))
+    }
 }
