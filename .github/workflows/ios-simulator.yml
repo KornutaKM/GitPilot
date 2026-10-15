@@ -63,7 +63,7 @@ jobs:
             -destination "platform=iOS Simulator,id=$DEVICE_ID" \
             -derivedDataPath "$RUNNER_TEMP/GitPilotCoreSmokeDerived" \
             -parallel-testing-enabled NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=-
       - name: Upload unsigned iOS simulator smoke host
         if: success()
         uses: actions/upload-artifact@v7
