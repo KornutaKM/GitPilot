@@ -42,8 +42,8 @@ In public mode, remote mutations are disabled. When signed in, comments, reviews
 - Repositories load in pages of 12 public or 20 authenticated items, up to five pages per manual browsing session. Only 4 public or 8 authenticated repositories are monitored for PRs and Actions.
 - Branch-specific commits load when selecting a branch; individual commit patches load on tap. Creating a remote branch requires authorization and confirmation.
 - PR check status comes from GitHub Checks for a bounded subset of PRs; it remains Unknown if no check data is available.
-- On-demand PR file patches, discussion history (first 50 issue comments and first 50 inline review comments) and workflow job lists. Job log previews show bounded output; full logs remain available on GitHub. Signed log redirects never receive the GitHub bearer token.
-- Manual dispatch is available for workflows enabled with workflow_dispatch; supply any required inputs as key=value lines. No push notifications, offline persistent cache, advanced API pagination, rebase or code editor.
+- On-demand PR file patches (up to 120 files), discussion history (up to 150 issue and 150 inline review comments), branch history (up to 60 commits), and workflow jobs (up to 200). Bounded detail pagination stops on a partial page; larger results require opening GitHub. Job log previews remain bounded and signed log redirects never receive the GitHub bearer token.
+- Manual dispatch is available for workflows enabled with workflow_dispatch; supply any required inputs as key=value lines. No push notifications, offline persistent cache, unlimited API crawling, rebase or multi-file code editor.
 - Anonymous API use is rate limited by GitHub; refresh is manual.
 
 ## Code structure
@@ -109,7 +109,7 @@ For Actions → Run a workflow, select a repository, an active workflow and bran
 
 ## Pull request discussion and workflow cancellation
 
-Open a PR to load its GitHub issue conversation and inline review comments together in chronological order. The app currently loads at most 50 entries from each endpoint; older/longer discussions may require opening the PR on GitHub. Signed-in users can post a conversation comment after seeing a confirmation dialog. GitHub checks permission and exposes comments to people with access to the PR. Input is trimmed, empty comments are rejected and submissions are bounded to 10,000 characters. Comments do not directly modify files.
+Open a PR to load its GitHub issue conversation and inline review comments together in chronological order. On demand, the app fetches up to three pages of 50 entries per endpoint (150 issue comments plus 150 inline review comments); older/longer discussions require opening the PR on GitHub. Signed-in users can post a conversation comment after seeing a confirmation dialog. GitHub checks permission and exposes comments to people with access to the PR. Input is trimmed, empty comments are rejected and submissions are bounded to 10,000 characters. Comments do not directly modify files.
 
 On a running/queued Actions run, signed-in users can request cancellation after confirmation; the operation is unavailable once the run is completed. GitHub determines whether cancellation is still possible, including race conditions with completion. These actions never simulate remote success.
 
@@ -143,3 +143,8 @@ The Repositories screen now offers **Load more repositories** when GitHub return
 ## Alpha 1.2 — Android security and quality gate
 
 GitPilot explicitly disables unencrypted network traffic. Cloud backup and device-transfer policies exclude shared preferences, in addition to disabling application backup. The Android CI workflow now runs the `lintDebug` static analyzer alongside JVM unit tests and APK compilation, preserving HTML/XML lint reports as a separate `GitPilot-lint` artifact. See [SECURITY.md](SECURITY.md) for credential handling, signed log redirects, remote-write expectations, security reporting and remaining alpha risks. For privacy, signing out (or session invalidation) also removes locally pinned repository names.
+
+
+## Bounded GitHub detail pagination
+
+PR changed-file previews load at most four pages of 30 entries, PR discussion loads three pages of 50 entries from each discussion endpoint, workflow job summaries load two pages of 100 jobs, and selected-branch history loads three pages of 20 commits. A short page stops subsequent requests. This is deliberately **not** exhaustive crawling: GitHub web remains the fallback for larger results. Errors and cancellations propagate to the UI instead of showing partially fetched results as a complete success. Anonymous access remains subject to GitHub rate limits.
