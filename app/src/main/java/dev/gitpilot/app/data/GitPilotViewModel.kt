@@ -156,7 +156,13 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                if (e is GitHubApiException && e.statusCode == 401) invalidateSession()
+                // A stale 401 from the old account must not wipe new credentials.
+                if (!isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) return@launch
+                if (e is GitHubApiException && e.statusCode == 401) {
+                    invalidateSession()
+                    mutable.update { it.copy(error = "GitHub session expired. Sign in again.") }
+                    return@launch
+                }
                 mutable.update { it.copy(loading = false, error = cleanError(e)) }
             }
         }
@@ -314,20 +320,25 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         if (mutable.value.directoryContents.containsKey(key) ||
             mutable.value.loadingDirectoryKey == key) return
         val epoch = authEpoch
+        val generation = workspaceGeneration
+        val requestKey = "directory:$key"
+        if (!detailRequestGate.begin(generation, requestKey)) return
         viewModelScope.launch {
-            if (epoch != authEpoch) return@launch
-            mutable.update { it.copy(loadingDirectoryKey = key, error = null) }
             try {
+                if (!isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) return@launch
+            mutable.update { it.copy(loadingDirectoryKey = key, error = null) }
                 val contents = service.listDirectory(repo, branch, path, currentToken())
-                if (epoch == authEpoch) mutable.update {
+                if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update {
                     it.copy(directoryContents = it.directoryContents + (key to contents),
                         loadingDirectoryKey = null)
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                if (epoch == authEpoch) mutable.update {
+                if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update {
                     it.copy(loadingDirectoryKey = null, error = cleanError(e))
                 }
+            } finally {
+                detailRequestGate.finish(generation, requestKey)
             }
         }
     }
@@ -337,20 +348,25 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         if (mutable.value.filePreviews.containsKey(key) ||
             mutable.value.loadingFileKey == key) return
         val epoch = authEpoch
+        val generation = workspaceGeneration
+        val requestKey = "file:$key"
+        if (!detailRequestGate.begin(generation, requestKey)) return
         viewModelScope.launch {
-            if (epoch != authEpoch) return@launch
-            mutable.update { it.copy(loadingFileKey = key, error = null) }
             try {
+                if (!isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) return@launch
+            mutable.update { it.copy(loadingFileKey = key, error = null) }
                 val preview = service.readFile(repo, branch, file, currentToken())
-                if (epoch == authEpoch) mutable.update {
+                if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update {
                     it.copy(filePreviews = it.filePreviews + (key to preview),
                         loadingFileKey = null)
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                if (epoch == authEpoch) mutable.update {
+                if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update {
                     it.copy(loadingFileKey = null, error = cleanError(e))
                 }
+            } finally {
+                detailRequestGate.finish(generation, requestKey)
             }
         }
     }
@@ -361,20 +377,25 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         if (mutable.value.comparisons.containsKey(key) ||
             mutable.value.loadingComparisonKey == key) return
         val epoch = authEpoch
+        val generation = workspaceGeneration
+        val requestKey = "comparison:$key"
+        if (!detailRequestGate.begin(generation, requestKey)) return
         viewModelScope.launch {
-            if (epoch != authEpoch) return@launch
-            mutable.update { it.copy(loadingComparisonKey = key, error = null) }
             try {
+                if (!isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) return@launch
+            mutable.update { it.copy(loadingComparisonKey = key, error = null) }
                 val comparison = service.compareBranches(repo, branch, currentToken())
-                if (epoch == authEpoch) mutable.update {
+                if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update {
                     it.copy(comparisons = it.comparisons + (key to comparison),
                         loadingComparisonKey = null)
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                if (epoch == authEpoch) mutable.update {
+                if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update {
                     it.copy(loadingComparisonKey = null, error = cleanError(e))
                 }
+            } finally {
+                detailRequestGate.finish(generation, requestKey)
             }
         }
     }
@@ -409,15 +430,20 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
         val key = commitKey(repo, commit)
         if (mutable.value.commitFiles.containsKey(key)) return
         val epoch = authEpoch
+        val generation = workspaceGeneration
+        val requestKey = "commit-files:$key"
+        if (!detailRequestGate.begin(generation, requestKey)) return
         viewModelScope.launch {
-            if (epoch != authEpoch) return@launch
-            if (epoch == authEpoch) mutable.update { it.copy(detailLoading = true, error = null) }
             try {
+                if (!isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) return@launch
+            if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update { it.copy(detailLoading = true, error = null) }
                 val files = service.commitFiles(repo, commit, currentToken())
-                if (epoch == authEpoch) mutable.update { it.copy(commitFiles = it.commitFiles + (key to files), detailLoading = false) }
+                if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update { it.copy(commitFiles = it.commitFiles + (key to files), detailLoading = false) }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                if (epoch == authEpoch) mutable.update { it.copy(detailLoading = false, error = cleanError(e)) }
+                if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update { it.copy(detailLoading = false, error = cleanError(e)) }
+            } finally {
+                detailRequestGate.finish(generation, requestKey)
             }
         }
     }
@@ -479,15 +505,20 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
     fun loadJobLog(run: WorkflowRunItem, step: WorkflowStep) {
         if (step.id <= 0 || mutable.value.jobLogs.containsKey(step.id)) return
         val epoch = authEpoch
+        val generation = workspaceGeneration
+        val requestKey = "job-log:${step.id}"
+        if (!detailRequestGate.begin(generation, requestKey)) return
         viewModelScope.launch {
-            if (epoch != authEpoch) return@launch
-            if (epoch == authEpoch) mutable.update { it.copy(loadingJobId = step.id, error = null) }
             try {
+                if (!isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) return@launch
+            if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update { it.copy(loadingJobId = step.id, error = null) }
                 val text = service.fetchJobLog(run, step, currentToken())
-                if (epoch == authEpoch) mutable.update { it.copy(jobLogs = it.jobLogs + (step.id to text), loadingJobId = null) }
+                if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update { it.copy(jobLogs = it.jobLogs + (step.id to text), loadingJobId = null) }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                if (epoch == authEpoch) mutable.update { it.copy(loadingJobId = null, error = cleanError(e)) }
+                if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update { it.copy(loadingJobId = null, error = cleanError(e)) }
+            } finally {
+                detailRequestGate.finish(generation, requestKey)
             }
         }
     }
@@ -619,18 +650,23 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
     fun loadWorkflowDefinitions(repo: RepositoryItem) {
         if (mutable.value.definitions.containsKey(repo.id)) return
         val epoch = authEpoch
+        val generation = workspaceGeneration
+        val requestKey = "definitions:${repo.id}"
+        if (!detailRequestGate.begin(generation, requestKey)) return
         viewModelScope.launch {
-            if (epoch != authEpoch) return@launch
-            if (epoch == authEpoch) mutable.update { it.copy(loadingDefinitionsId = repo.id, error = null) }
             try {
+                if (!isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) return@launch
+            if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update { it.copy(loadingDefinitionsId = repo.id, error = null) }
                 val definitions = service.listWorkflows(repo, currentToken())
-                if (epoch == authEpoch) mutable.update { it.copy(
+                if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update { it.copy(
                     definitions = it.definitions + (repo.id to definitions),
                     loadingDefinitionsId = null
                 ) }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                if (epoch == authEpoch) mutable.update { it.copy(loadingDefinitionsId = null, error = cleanError(e)) }
+                if (isCurrentWorkspaceRequest(epoch, generation, authEpoch, workspaceGeneration)) mutable.update { it.copy(loadingDefinitionsId = null, error = cleanError(e)) }
+            } finally {
+                detailRequestGate.finish(generation, requestKey)
             }
         }
     }
@@ -695,9 +731,14 @@ class GitPilotViewModel(app: Application) : AndroidViewModel(app) {
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                if (e is GitHubApiException && e.statusCode == 401) invalidateSession()
-                if (epoch == authEpoch) {
-                    mutable.update { it.copy(loading = false, error = cleanError(e)) }
+                // Ignore completed remote operations from an account that signed out.
+                if (isCurrentSessionEpoch(epoch, authEpoch)) {
+                    if (e is GitHubApiException && e.statusCode == 401) {
+                        invalidateSession()
+                        mutable.update { it.copy(error = "GitHub session expired. Sign in again.") }
+                    } else {
+                        mutable.update { it.copy(loading = false, error = cleanError(e)) }
+                    }
                 }
             } finally {
                 mutationInProgress = false
