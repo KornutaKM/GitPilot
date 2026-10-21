@@ -7,7 +7,7 @@ struct GitPilotCoreSmokeApp: App {
     var body: some Scene {
         WindowGroup {
             GitPilotCoreSmokeView()
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(.light)
         }
     }
 }
