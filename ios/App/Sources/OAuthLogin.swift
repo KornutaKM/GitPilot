@@ -37,7 +37,10 @@ final class OAuthLogin: NSObject {
 
     var isConfigured: Bool {
         OAuthConfiguration.isConfigured &&
-            OAuthConfiguration.backendURL.map(GitHubOAuthGatewayPolicy.trustedBackend) == true
+            OAuthConfiguration.backendURL.map(GitHubOAuthGatewayPolicy.trustedBackend) == true &&
+            OAuthConfiguration.callbackURL?.host?.lowercased() ==
+                OAuthConfiguration.backendURL?.host?.lowercased() &&
+            OAuthConfiguration.backendURL?.port == nil
     }
 
     func signIn() async throws -> OAuthCredentials {
@@ -53,7 +56,8 @@ final class OAuthLogin: NSObject {
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
         let url = try OAuthAuthorizationPolicy.authorizeURL(
-            clientID: clientID, callback: callbackURL, state: state, codeChallenge: challenge
+            clientID: clientID, gateway: backend, callback: callbackURL,
+            state: state, codeChallenge: challenge
         )
         let callback: URL = try await withCheckedThrowingContinuation {
             (continuation: CheckedContinuation<URL, Error>) in
