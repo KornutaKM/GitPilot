@@ -28,7 +28,7 @@ struct PublicWorkspaceRoot: View {
                 VStack(spacing: 12) {
                     Image(systemName: "lock.shield.fill")
                         .font(.system(size: 36)).foregroundStyle(GP.accent)
-                    Text("GitPilot").font(.title2.bold()).foregroundStyle(.white)
+                    Text("GitPilot").font(.title2.bold()).foregroundStyle(GP.ink)
                     Text("Workspace hidden").font(.caption).foregroundStyle(GP.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -51,7 +51,7 @@ private struct LoadingOrError: View {
                 Surface {
                     ProgressView("Reading public GitHub data…")
                         .tint(GP.accent)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(GP.ink)
                 }
             }
             if let error = store.errorMessage {
@@ -89,7 +89,7 @@ private struct Metric: View {
             GPIndicator(icon: symbol, tint: tint)
             Text("\(value)")
                 .font(.system(size: 30, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
+                .foregroundStyle(GP.ink)
             Text(label).font(.caption).foregroundStyle(GP.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -138,7 +138,7 @@ private struct TodayScreen: View {
                 Surface {
                     Eyebrow(text: "INTEGRATION STATUS")
                     Text("iOS RC3 migration")
-                        .font(.title3.weight(.semibold)).foregroundStyle(.white)
+                        .font(.title3.weight(.semibold)).foregroundStyle(GP.ink)
                     Text("Public browsing is connected to GitHub. OAuth, private repositories, reviews, merges and publishing are intentionally unavailable in this build.")
                         .font(.footnote).foregroundStyle(GP.secondary)
                     StatusPill(text: "Read-only alpha", color: GP.amber)
@@ -181,7 +181,7 @@ private struct ProtectedBrowseShortcut: View {
                 Surface {
                     Label("Browse " + mode, systemImage: "lock.shield.fill")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(GP.ink)
                     MetaText(text: "Verified GitHub App only · private data remains in memory")
                 }
             }
@@ -217,7 +217,7 @@ private struct ReviewsScreen: View {
                             Spacer(minLength: 4)
                             Text("#\(pull.number)").font(.caption.monospacedDigit()).foregroundStyle(GP.secondary)
                         }
-                        Text(pull.title).font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+                        Text(pull.title).font(.subheadline.weight(.semibold)).foregroundStyle(GP.ink)
                         MetaText(text: "@\(pull.user.login) · \(pull.head.ref) → \(pull.base.ref)")
                         SafeGitHubLink(title: "View PR on GitHub", url: pull.htmlURL)
                     }
@@ -242,7 +242,7 @@ private struct WorkflowCard: View {
                     tint: run.failed ? GP.red : run.running ? GP.blue : GP.green)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(run.title).font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white).lineLimit(2)
+                        .foregroundStyle(GP.ink).lineLimit(2)
                     MetaText(text: run.headBranch ?? "Unknown branch")
                 }
                 Spacer(minLength: 4)
@@ -307,7 +307,7 @@ private struct RepositoriesScreen: View {
                                 GPIndicator(icon: "folder.fill", tint: GP.accent)
                                 VStack(alignment: .leading, spacing: 5) {
                                     Text(repository.fullName).font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(GP.ink)
                                     if let summary = repository.description, !summary.isEmpty {
                                         Text(summary).font(.caption).foregroundStyle(GP.secondary)
                                             .lineLimit(2)
@@ -355,7 +355,7 @@ private struct RepositoryDetailsScreen: View {
                          subtitle: repository.fullName)
                 Surface {
                     Text(repository.description ?? "No description.")
-                        .foregroundStyle(.white)
+                        .foregroundStyle(GP.ink)
                     MetaText(text: "Default branch: \(repository.defaultBranch)")
                     MetaText(text: "Language: \(repository.language ?? "Unknown")")
                     MetaText(text: "Stars: \(repository.stargazersCount)")
@@ -368,7 +368,7 @@ private struct RepositoryDetailsScreen: View {
                     } label: {
                         Surface {
                             Label("Browse public files", systemImage: "folder.fill")
-                                .foregroundStyle(.white)
+                                .foregroundStyle(GP.ink)
                             MetaText(text: "Folders and small UTF-8 file previews")
                         }
                     }
@@ -378,7 +378,7 @@ private struct RepositoryDetailsScreen: View {
                     } label: {
                         Surface {
                             Label("Recent commits", systemImage: "point.3.connected.trianglepath.dotted")
-                                .foregroundStyle(.white)
+                                .foregroundStyle(GP.ink)
                             MetaText(text: "Up to 12 latest commits on the default branch")
                         }
                     }
