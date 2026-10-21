@@ -1,11 +1,9 @@
 package dev.gitpilot.app.ui
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -16,48 +14,44 @@ import androidx.compose.ui.unit.sp
 
 /**
  * GitPilot Aurora: shared semantic colors with the native iOS edition.
- * Readable light and dark schemes; no network-loaded fonts or dynamic palettes.
+ * Accessible lavender/mint/peach colors; no network fonts or dynamic secrets.
  */
-private val Ink = Color(0xFF0B0E16)
-private val Panel = Color(0xFF151B28)
-private val Lavender = Color(0xFFB0A1FF)
-private val Mint = Color(0xFF66DDAF)
-private val LightInk = Color(0xFF192034)
+private val Ink = Color(0xFF332C4A)
+private val Lavender = Color(0xFFE8DDF9)
+private val Mint = Color(0xFFD5F2E2)
+private val Peach = Color(0xFFFFE5D6)
+private val Blush = Color(0xFFF9DDEB)
+private val LilacAccent = Color(0xFF6950B0)
+private val MintAccent = Color(0xFF2D7557)
 
-private val DarkPalette = darkColorScheme(
-    primary = Lavender,
-    onPrimary = Color(0xFF241D49),
-    primaryContainer = Color(0xFF302752),
-    onPrimaryContainer = Color(0xFFECE5FF),
-    secondary = Mint,
-    onSecondary = Ink,
-    background = Ink,
-    onBackground = Color(0xFFF6F5FC),
-    surface = Panel,
-    onSurface = Color(0xFFF6F5FC),
-    surfaceVariant = Color(0xFF222A39),
-    onSurfaceVariant = Color(0xFFB4BED0),
-    outline = Color(0xFF435064),
-    error = Color(0xFFFF7683),
-    onError = Ink
-)
-
-private val LightPalette = lightColorScheme(
-    primary = Color(0xFF6254BA),
+private val PastelPalette = lightColorScheme(
+    primary = LilacAccent,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFECE6FF),
-    onPrimaryContainer = Color(0xFF30235D),
-    secondary = Color(0xFF26795A),
+    primaryContainer = Lavender,
+    onPrimaryContainer = Ink,
+    secondary = MintAccent,
     onSecondary = Color.White,
-    background = Color(0xFFF7F7FC),
-    onBackground = LightInk,
+    secondaryContainer = Mint,
+    onSecondaryContainer = Ink,
+    tertiary = Color(0xFFA75575),
+    onTertiary = Color.White,
+    tertiaryContainer = Blush,
+    onTertiaryContainer = Ink,
+    background = Color(0xFFF8F5FB),
+    onBackground = Ink,
     surface = Color.White,
-    onSurface = LightInk,
-    surfaceVariant = Color(0xFFF0F1F8),
-    onSurfaceVariant = Color(0xFF596278),
-    outline = Color(0xFFD2D7E5),
-    error = Color(0xFFBB344C),
-    onError = Color.White
+    onSurface = Ink,
+    surfaceVariant = Color(0xFFF1EBF9),
+    onSurfaceVariant = Color(0xFF635D7A),
+    surfaceTint = LilacAccent,
+    outline = Color(0xFFDCD3EB),
+    outlineVariant = Color(0xFFEDE5F4),
+    error = Color(0xFFA74764),
+    onError = Color.White,
+    errorContainer = Peach,
+    onErrorContainer = Ink,
+    inverseSurface = Ink,
+    inverseOnSurface = Color(0xFFF8F5FB)
 )
 
 private val AuroraShapes = Shapes(
@@ -87,7 +81,7 @@ private val AuroraTypography = Typography(
 @Composable
 fun GitPilotTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = if (isSystemInDarkTheme()) DarkPalette else LightPalette,
+        colorScheme = PastelPalette,
         shapes = AuroraShapes,
         typography = AuroraTypography,
         content = content
