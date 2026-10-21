@@ -110,6 +110,14 @@ xcodebuild build -project ios/App/GitPilotCoreSmoke.xcodeproj -scheme GitPilotCo
 
 This is a **fully wired conditional sign-in experience**, not a claim that GitHub credentials, a production host or physical-device authorization have already been provisioned. Remote mutations (PR reviews, merges, commits and workflow dispatch) remain disabled until live signing and permission tests succeed.
 
+## Encrypted local file editor and diff staging (PR #18)
+
+The authenticated private-source file preview now exposes **Stage a secure local edit** only if GitHub supplies a valid original blob SHA (40- or 64-character lowercase/uppercase hex). The full-screen pastel editor permits bounded UTF-8 changes, shows a line-level diff (maximum 60 rendered lines), and saves up to 12 file edits / 1 MB total in the existing device-only AES-256-GCM draft vault. Every staged item records repository ID, branch, file path, original Git blob SHA, original source, and new source. Saving replaces only the matching staged file; deletion cleans up the single draft without touching remote GitHub.
+
+A session/account revision check locks the editor on sign-out or token refresh, and the view clears its working plaintext when navigation ends. The vault does not expose content to UserDefaults, app backups, logs or a backend. Six Foundation XCTest cases check SHA/ref/path validation, size/binary rejection and bounded dry-run diff, and three native iPhone Simulator tests check real Keychain/AES-GCM behavior, multiple encrypted edits, invalid save rollback and data erasure.
+
+**There is deliberately no remote GitHub commit in this milestone.** The saved diff is a draft only. Live OAuth, signed device permission checks, conflict handling and explicit commit confirmation will precede enabling authenticated write operations.
+
 ## Remaining migration and release gates
 
 **Not yet migrated into this GitHub repository:** the full authenticated RC3 SwiftUI flows, the full write-capable network stack, production Xcode project, app assets, Keychain-backed authenticated workspace and staged draft editing integration, configured/validated Cloudflare OAuth gateway deployment, signed Universal Link support, and remote mutation feature screens. The simulator smoke host is not a replacement for these. The pre-existing RC3 archive includes those sources; it has not passed a native Xcode build and must be integrated and verified before TestFlight. Mac Swift Package tests are a foundation check, **not** an iOS simulator build or an iPhone QA pass.
