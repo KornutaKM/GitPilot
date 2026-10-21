@@ -17,8 +17,11 @@ struct PublicWorkspaceRoot: View {
                     .tabItem { Label("Actions", systemImage: "bolt.fill") }
                 NavigationStack { RepositoriesScreen(store: store) }
                     .tabItem { Label("Repos", systemImage: "square.stack.3d.up.fill") }
+                NavigationStack { AccountCenterScreen(store: store) }
+                    .tabItem { Label("Account", systemImage: "person.crop.circle.fill") }
             }
             .tint(GP.accent)
+            .toolbarBackground(GP.card, for: .tabBar)
             .environmentObject(account)
 
             // Mirror RC3's app-switcher privacy cover; future OAuth/private
@@ -35,7 +38,7 @@ struct PublicWorkspaceRoot: View {
                 .accessibilityLabel("GitPilot content hidden")
             }
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(.light)
         .task {
             account.restoreOnce()
             if !store.hasLoaded && !store.isLoading { store.refresh() }
@@ -98,6 +101,46 @@ private struct Metric: View {
     }
 }
 
+/// A compact, always-visible entry point to the actual OAuth flow.
+private struct AccountStatusBanner: View {
+    @EnvironmentObject private var account: OAuthAccountSession
+
+    var body: some View {
+        Surface {
+            HStack(spacing: 12) {
+                GPIndicator(icon: account.authenticatedAs == nil ? "lock.shield" : "checkmark.shield.fill",
+                            tint: account.authenticatedAs == nil ? GP.amber : GP.green)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(account.authenticatedAs.map { "Connected as @\($0)" } ?? "Connect to GitHub")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(GP.ink)
+                    MetaText(text: account.authenticatedAs == nil
+                        ? "Use secure OAuth for private repositories and reviews."
+                        : "Verified session · tokens protected by Keychain")
+                }
+                Spacer(minLength: 0)
+                StatusPill(text: account.authenticatedAs == nil ? "Guest" : "Secure",
+                           color: account.authenticatedAs == nil ? GP.amber : GP.green)
+            }
+            if account.authenticatedAs == nil && account.isConfigured && !account.busy {
+                Button {
+                    account.signIn()
+                } label: {
+                    Label("Continue with GitHub", systemImage: "arrow.up.right.square")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            if account.busy {
+                ProgressView("Connecting to GitHub…").tint(GP.accent)
+            }
+            if let error = account.errorMessage {
+                MetaText(text: error)
+            }
+        }
+    }
+}
+
 private struct TodayScreen: View {
     @ObservedObject var store: PublicWorkspaceStore
     @State private var showingProfile = false
@@ -105,11 +148,14 @@ private struct TodayScreen: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 20) {
-                GPHeader(
-                    eyebrow: "@\(store.username) · PUBLIC PREVIEW",
-                    title: "Your work,\nat a glance.",
-                    subtitle: "Read-only GitHub activity across a bounded sample of public projects."
+                GPWelcomeCard(
+                    eyebrow: "@\(store.username) · YOUR GITHUB SPACE",
+                    title: "Make space\nfor great work.",
+                    subtitle: "Pull requests, code and workflows, thoughtfully organised.",
+                    icon: "sparkles"
                 )
+                AccountStatusBanner()
+
                 HStack(spacing: 12) {
                     Metric(value: store.pullRequests.count, label: "Sample PRs",
                            symbol: "arrow.triangle.pull", tint: GP.accent)
@@ -139,7 +185,7 @@ private struct TodayScreen: View {
                     Eyebrow(text: "INTEGRATION STATUS")
                     Text("iOS RC3 migration")
                         .font(.title3.weight(.semibold)).foregroundStyle(GP.ink)
-                    Text("Public browsing is connected to GitHub. OAuth, private repositories, reviews, merges and publishing are intentionally unavailable in this build.")
+                    Text("Public GitHub browsing works without login. Connect a verified GitHub App account to browse private repositories, source, PRs and workflows. Remote writes are not yet enabled.")
                         .font(.footnote).foregroundStyle(GP.secondary)
                     StatusPill(text: "Read-only alpha", color: GP.amber)
                 }
@@ -191,7 +237,7 @@ private struct ProtectedBrowseShortcut: View {
                 Label("Private " + mode + " locked", systemImage: "lock.fill")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(GP.secondary)
-                MetaText(text: "Connect your GitHub App from the profile sheet to enable protected browsing.")
+                MetaText(text: "Open Account to sign in securely with GitHub.")
             }
         }
     }
