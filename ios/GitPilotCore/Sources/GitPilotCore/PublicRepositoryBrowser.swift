@@ -20,6 +20,8 @@ public struct PublicFilePreview {
     public let path: String
     public let text: String
     public let htmlURL: URL?
+    /// The source blob ID from GitHub. Required for conflict-safe staging.
+    public let sha: String?
 }
 
 public struct PublicCommit: Decodable, Identifiable, Equatable {
@@ -94,9 +96,10 @@ public extension PublicGitHubAPI {
             let size: Int
             let encoding: String?
             let content: String?
+            let sha: String?
             let htmlURL: URL?
             enum CodingKeys: String, CodingKey {
-                case type, path, size, encoding, content
+                case type, path, size, encoding, content, sha
                 case htmlURL = "html_url"
             }
         }
@@ -114,7 +117,7 @@ public extension PublicGitHubAPI {
             throw PublicGitHubError.invalidResponse
         }
         return PublicFilePreview(path: file.path, text: text,
-                                 htmlURL: Self.safeGitHubWebURL(result.htmlURL))
+                                 htmlURL: Self.safeGitHubWebURL(result.htmlURL), sha: result.sha)
     }
 
     func recentCommits(

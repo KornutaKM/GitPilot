@@ -131,9 +131,10 @@ public struct AuthenticatedContentsAPI {
             let size: Int
             let encoding: String?
             let content: String?
+            let sha: String?
             let htmlURL: URL?
             enum CodingKeys: String, CodingKey {
-                case type, path, size, encoding, content
+                case type, path, size, encoding, content, sha
                 case htmlURL = "html_url"
             }
         }
@@ -150,7 +151,8 @@ public struct AuthenticatedContentsAPI {
               let text = String(data: decoded, encoding: .utf8),
               !text.contains("\u{0000}") else { throw ReadError.invalidPayload }
         return PublicFilePreview(path: file.path, text: text,
-                                 htmlURL: PublicGitHubAPI.safeGitHubWebURL(payload.htmlURL))
+                                 htmlURL: PublicGitHubAPI.safeGitHubWebURL(payload.htmlURL),
+                                 sha: payload.sha)
     }
 }
 

@@ -2,18 +2,18 @@ import Foundation
 
 /// A bounded line diff for reviewing staged changes before a real Git commit.
 /// Large inputs avoid an expensive full diff and show an explicit fallback.
-enum StagedDiffPreview {
-    enum Kind: String { case added, removed, unchanged, warning }
-    struct Line: Identifiable {
-        let id: Int
-        let kind: Kind
-        let text: String
-        var prefix: String {
+public enum StagedDiffPreview {
+    public enum Kind: String { case added, removed, unchanged, warning }
+    public struct Line: Identifiable {
+        public let id: Int
+        public let kind: Kind
+        public let text: String
+        public var prefix: String {
             switch kind { case .added: return "+"; case .removed: return "−"; case .unchanged: return " "; case .warning: return "!" }
         }
     }
 
-    static func lines(from before: String, to after: String, maxLines: Int = 140) -> [Line] {
+    public static func lines(from before: String, to after: String, maxLines: Int = 140) -> [Line] {
         guard maxLines >= 2 && maxLines <= 500 else {
             return [Line(id: 0, kind: .warning, text: "Invalid diff preview size.")]
         }
