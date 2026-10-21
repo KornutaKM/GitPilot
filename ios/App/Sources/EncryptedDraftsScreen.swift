@@ -80,8 +80,8 @@ struct EncryptedDraftsScreen: View {
                                         to: draft.newContent, maxLines: 40)) { line in
                                         Text(line.prefix + " " + line.text)
                                             .font(.system(size: 11, design: .monospaced))
-                                            .foregroundStyle(line.kind == .addition ? GP.green :
-                                                line.kind == .deletion ? GP.red : GP.secondary)
+                                            .foregroundStyle(line.kind == .added ? GP.green :
+                                                line.kind == .removed ? GP.red : GP.secondary)
                                             .textSelection(.enabled)
                                     }
                                 }
