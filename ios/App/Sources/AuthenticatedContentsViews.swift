@@ -157,6 +157,30 @@ struct AuthenticatedFileScreen: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(GP.card, in: RoundedRectangle(cornerRadius: GP.radius))
                     }
+                    if let preview, let sha = preview.sha,
+                       AuthenticatedStagingPolicy.validBlobSHA(sha) {
+                        NavigationLink {
+                            EncryptedDraftEditor(repository: repository, branch: branch,
+                                                 preview: preview)
+                        } label: {
+                            Surface {
+                                HStack(spacing: 12) {
+                                    GPIndicator(icon: "square.and.pencil", tint: GP.accent)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Stage a secure local edit")
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(GP.ink)
+                                        MetaText(text: "Review changes, encrypt and save · no remote commit")
+                                    }
+                                    Spacer(minLength: 0)
+                                    Image(systemName: "chevron.right").foregroundStyle(GP.secondary)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    } else if preview != nil {
+                        MetaText(text: "GitHub did not return a valid original blob SHA; editing is disabled.")
+                    }
                     MetaText(text: "UTF-8 only; source remains in memory and is cleared on sign-out.")
                 }
             }
