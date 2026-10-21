@@ -52,15 +52,9 @@ final class OAuthLogin: NSObject {
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
-        var authorize = URLComponents(string: "https://github.com/login/oauth/authorize")!
-        authorize.queryItems = [
-            .init(name: "client_id", value: clientID),
-            .init(name: "redirect_uri", value: callbackURL.absoluteString),
-            .init(name: "state", value: state),
-            .init(name: "code_challenge", value: challenge),
-            .init(name: "code_challenge_method", value: "S256")
-        ]
-        guard let url = authorize.url else { throw LoginError.invalidCallback }
+        let url = try OAuthAuthorizationPolicy.authorizeURL(
+            clientID: clientID, callback: callbackURL, state: state, codeChallenge: challenge
+        )
         let callback: URL = try await withCheckedThrowingContinuation {
             (continuation: CheckedContinuation<URL, Error>) in
             let session = ASWebAuthenticationSession(
