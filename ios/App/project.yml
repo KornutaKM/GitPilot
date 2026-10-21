@@ -19,6 +19,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: dev.gitpilot.core.smoke
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_CFBundleDisplayName: GitPilot
         TARGETED_DEVICE_FAMILY: '1,2'
         CODE_SIGNING_ALLOWED: NO
         CODE_SIGN_ENTITLEMENTS: Config/SimulatorKeychain.entitlements
@@ -26,6 +27,8 @@ targets:
         GITPILOT_OAUTH_CLIENT_ID: ''
         GITPILOT_OAUTH_BACKEND_URL: ''
         GITPILOT_OAUTH_CALLBACK_URL: ''
+        # Only populated by publisher signing; must match the HTTPS callback host.
+        GITPILOT_OAUTH_ASSOCIATED_DOMAIN: ''
         INFOPLIST_KEY_GitPilotOAuthClientID: "$(GITPILOT_OAUTH_CLIENT_ID)"
         INFOPLIST_KEY_GitPilotOAuthBackendURL: "$(GITPILOT_OAUTH_BACKEND_URL)"
         INFOPLIST_KEY_GitPilotOAuthCallbackURL: "$(GITPILOT_OAUTH_CALLBACK_URL)"
