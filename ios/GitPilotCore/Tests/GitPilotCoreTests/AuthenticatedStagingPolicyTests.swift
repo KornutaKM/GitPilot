@@ -78,8 +78,8 @@ final class AuthenticatedStagingPolicyTests: XCTestCase {
             originalBlobSHA: sha, original: "old", revised: "new")
         let lines = StagedDiffPreview.lines(from: edit.originalContent,
                                             to: edit.newContent, maxLines: 30)
-        XCTAssertTrue(lines.contains { $0.kind == .addition && $0.text == "new" })
-        XCTAssertTrue(lines.contains { $0.kind == .deletion && $0.text == "old" })
+        XCTAssertTrue(lines.contains { $0.kind == .added && $0.text == "new" })
+        XCTAssertTrue(lines.contains { $0.kind == .removed && $0.text == "old" })
         XCTAssertLessThanOrEqual(lines.count, 30)
     }
 }
