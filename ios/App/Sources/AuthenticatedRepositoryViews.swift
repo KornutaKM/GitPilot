@@ -85,7 +85,7 @@ struct AuthenticatedRepositoriesScreen: View {
                             tint: repo.privateRepository ? GP.amber : GP.accent)
                 VStack(alignment: .leading, spacing: 5) {
                     Text(repo.fullName).font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(GP.ink)
                     Text(repo.privateRepository ? "Private · read-only" : "Public · read-only")
                         .font(.caption).foregroundStyle(GP.secondary)
                 }

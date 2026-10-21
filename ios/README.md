@@ -75,6 +75,41 @@ All authenticated requests are named GET endpoints on exactly `https://api.githu
 
 Twelve deterministic XCTest transport regressions cover token injection, host redirection, pagination bounds, request methods, invalid IDs, large/broken responses, and distinct GitHub errors. The existing native Keychain/AES-GCM simulator tests remain release gates. **This milestone does not permit reviews, comments, merges, reruns, dispatches, file edits or commits**; live OAuth permissions and physical device QA are still pending.
 
+## Aurora Pastel UI + complete opt-in GitHub App sign-in journey (PR #17)
+
+The native iOS workspace and Android Material 3 app share a bright **lavender / mint / peach / blush** design vocabulary, with accessible dark-ink typography. iOS adds a five-tab navigation layout (**Today, Reviews, Actions, Repos, Account**), a pastel hero, visible verified/guest connection status, secure sign-in affordances, custom semantic surfaces and comprehensive error/empty states. This is real SwiftUI layout code, not a static mockup or an image.
+
+The **Account** screen provides:
+- native `Continue with GitHub` via `ASWebAuthenticationSession` (iOS 17.4+) and PKCE S256;
+- a previously migrated server-owned Cloudflare OAuth gateway for code exchange and token rotation;
+- verified `GET /user` identity, device-only Keychain persistence, restoration, reconnect and sign-out;
+- authenticated, memory-only repository → source / PRs / discussion / Actions flows;
+- a separate anonymous public profile explorer, which **never** receives the bearer token.
+
+The new `OAuthAuthorizationPolicy` rejects malformed callback origins, state/challenge values and embedded secrets before opening the browser; four offline XCTest cases guard this contract. Three additional native XCTest checks enforce readable contrast on the actual iOS SDK. Android's existing OAuth Device Flow and API features are retained while its Material 3 palette is aligned with iOS.
+
+### Required one-time operator configuration before login is live
+
+GitHub App OAuth **cannot succeed in an ordinary unsigned/simulator CI build**, because the repo does not store deployment secrets, GitHub App registration or signing profiles. To enable login on a signed real device:
+1. Register a GitHub App with expiring user tokens and the exact HTTPS callback `https://YOUR_OWN_DOMAIN/oauth/callback`. Grant only the read permissions the tested endpoints need.
+2. Deploy the Worker in `backend/` behind your owned HTTPS domain. Provision `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_CALLBACK_URI`, the rate-limiter and valid Apple App Site Association outside Git history. Validate the deployed health, callback and AASA responses.
+3. Set build values `GITPILOT_OAUTH_CLIENT_ID`, `GITPILOT_OAUTH_BACKEND_URL`, `GITPILOT_OAUTH_CALLBACK_URL` and `GITPILOT_OAUTH_ASSOCIATED_DOMAIN` (the hostname only, no scheme). Use a valid Apple Development Team, matching bundle ID/provisioning profile and `ios/App/Config/ProductionOAuth.entitlements` instead of the simulator-only entitlements. **Never pass the GitHub App client secret** to Xcode.
+4. On a signed iPhone, verify Universal Link handoff to `ASWebAuthenticationSession`, fresh sign-in, token refresh, process restart, account switch, offline mode, 401 revocation, Keychain and logout. These remain outstanding physical QA gates.
+
+```bash
+xcodegen generate --spec ios/App/project.yml
+# An operator's signed device build (insert values using secure local CI variables).
+xcodebuild build -project ios/App/GitPilotCoreSmoke.xcodeproj -scheme GitPilotCoreSmoke \
+  -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=YES \
+  CODE_SIGN_ENTITLEMENTS=Config/ProductionOAuth.entitlements \
+  GITPILOT_OAUTH_CLIENT_ID="$GITPILOT_OAUTH_CLIENT_ID" \
+  GITPILOT_OAUTH_BACKEND_URL="$GITPILOT_OAUTH_BACKEND_URL" \
+  GITPILOT_OAUTH_CALLBACK_URL="$GITPILOT_OAUTH_CALLBACK_URL" \
+  GITPILOT_OAUTH_ASSOCIATED_DOMAIN="$GITPILOT_OAUTH_ASSOCIATED_DOMAIN"
+```
+
+This is a **fully wired conditional sign-in experience**, not a claim that GitHub credentials, a production host or physical-device authorization have already been provisioned. Remote mutations (PR reviews, merges, commits and workflow dispatch) remain disabled until live signing and permission tests succeed.
+
 ## Remaining migration and release gates
 
 **Not yet migrated into this GitHub repository:** the full authenticated RC3 SwiftUI flows, the full write-capable network stack, production Xcode project, app assets, Keychain-backed authenticated workspace and staged draft editing integration, configured/validated Cloudflare OAuth gateway deployment, signed Universal Link support, and remote mutation feature screens. The simulator smoke host is not a replacement for these. The pre-existing RC3 archive includes those sources; it has not passed a native Xcode build and must be integrated and verified before TestFlight. Mac Swift Package tests are a foundation check, **not** an iOS simulator build or an iPhone QA pass.

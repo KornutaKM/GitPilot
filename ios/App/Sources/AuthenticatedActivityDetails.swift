@@ -54,7 +54,7 @@ struct AuthenticatedPullDetailsScreen: View {
                         Surface {
                             HStack {
                                 Text(file.filename).font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(GP.ink)
                                     .lineLimit(3)
                                 Spacer(minLength: 4)
                                 StatusPill(text: file.status, color: GP.blue)
@@ -64,7 +64,7 @@ struct AuthenticatedPullDetailsScreen: View {
                                 ScrollView(.horizontal) {
                                     Text(patch)
                                         .font(.system(size: 11, design: .monospaced))
-                                        .foregroundStyle(.white.opacity(0.9))
+                                        .foregroundStyle(GP.secondary)
                                         .textSelection(.enabled)
                                         .padding(10)
                                 }
@@ -117,7 +117,7 @@ struct AuthenticatedPullDetailsScreen: View {
             }
             Text(comment.body ?? "(No text)")
                 .font(.subheadline)
-                .foregroundStyle(.white)
+                .foregroundStyle(GP.ink)
                 .lineLimit(10)
             if let url = PublicGitHubAPI.safeGitHubWebURL(comment.htmlURL) {
                 Link("View comment on GitHub", destination: url).font(.caption)
@@ -215,7 +215,7 @@ struct AuthenticatedWorkflowJobsScreen: View {
                         Surface {
                             HStack {
                                 Text(job.name).font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.white).lineLimit(2)
+                                    .foregroundStyle(GP.ink).lineLimit(2)
                                 Spacer(minLength: 4)
                                 StatusPill(text: job.conclusion ?? job.status,
                                             color: job.conclusion == "failure" ? GP.red :

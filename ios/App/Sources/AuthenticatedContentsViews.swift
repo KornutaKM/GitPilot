@@ -71,7 +71,7 @@ struct AuthenticatedDirectoryScreen: View {
             HStack(spacing: 12) {
                 GPIndicator(icon: icon, tint: file.isDirectory ? GP.accent : GP.blue)
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(file.name).font(.subheadline.weight(.medium)).foregroundStyle(.white)
+                    Text(file.name).font(.subheadline.weight(.medium)).foregroundStyle(GP.ink)
                     MetaText(text: file.isDirectory ? "Directory" :
                         file.isFile ? "\(file.size ?? 0) bytes" : "Unsupported link")
                 }
@@ -150,7 +150,7 @@ struct AuthenticatedFileScreen: View {
                         ScrollView(.horizontal) {
                             Text(preview.text)
                                 .font(.system(size: 12, design: .monospaced))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(GP.ink)
                                 .textSelection(.enabled)
                                 .padding(18)
                         }

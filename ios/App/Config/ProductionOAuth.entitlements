@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Only for a developer-team-signed build with a matching provisioning
+         profile. Replace the build-setting placeholder from secure CI config.
+         An empty value must never be shipped. -->
+    <key>keychain-access-groups</key>
+    <array>
+        <string>$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    </array>
+    <key>com.apple.developer.associated-domains</key>
+    <array>
+        <string>applinks:$(GITPILOT_OAUTH_ASSOCIATED_DOMAIN)</string>
+    </array>
+</dict>
+</plist>

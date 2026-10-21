@@ -17,8 +17,11 @@ struct PublicWorkspaceRoot: View {
                     .tabItem { Label("Actions", systemImage: "bolt.fill") }
                 NavigationStack { RepositoriesScreen(store: store) }
                     .tabItem { Label("Repos", systemImage: "square.stack.3d.up.fill") }
+                NavigationStack { AccountCenterScreen(store: store) }
+                    .tabItem { Label("Account", systemImage: "person.crop.circle.fill") }
             }
             .tint(GP.accent)
+            .toolbarBackground(GP.card, for: .tabBar)
             .environmentObject(account)
 
             // Mirror RC3's app-switcher privacy cover; future OAuth/private
@@ -28,14 +31,14 @@ struct PublicWorkspaceRoot: View {
                 VStack(spacing: 12) {
                     Image(systemName: "lock.shield.fill")
                         .font(.system(size: 36)).foregroundStyle(GP.accent)
-                    Text("GitPilot").font(.title2.bold()).foregroundStyle(.white)
+                    Text("GitPilot").font(.title2.bold()).foregroundStyle(GP.ink)
                     Text("Workspace hidden").font(.caption).foregroundStyle(GP.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityLabel("GitPilot content hidden")
             }
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(.light)
         .task {
             account.restoreOnce()
             if !store.hasLoaded && !store.isLoading { store.refresh() }
@@ -51,7 +54,7 @@ private struct LoadingOrError: View {
                 Surface {
                     ProgressView("Reading public GitHub data…")
                         .tint(GP.accent)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(GP.ink)
                 }
             }
             if let error = store.errorMessage {
@@ -89,12 +92,52 @@ private struct Metric: View {
             GPIndicator(icon: symbol, tint: tint)
             Text("\(value)")
                 .font(.system(size: 30, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
+                .foregroundStyle(GP.ink)
             Text(label).font(.caption).foregroundStyle(GP.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(GP.card, in: RoundedRectangle(cornerRadius: GP.radius))
+    }
+}
+
+/// A compact, always-visible entry point to the actual OAuth flow.
+private struct AccountStatusBanner: View {
+    @EnvironmentObject private var account: OAuthAccountSession
+
+    var body: some View {
+        Surface {
+            HStack(spacing: 12) {
+                GPIndicator(icon: account.authenticatedAs == nil ? "lock.shield" : "checkmark.shield.fill",
+                            tint: account.authenticatedAs == nil ? GP.amber : GP.green)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(account.authenticatedAs.map { "Connected as @\($0)" } ?? "Connect to GitHub")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(GP.ink)
+                    MetaText(text: account.authenticatedAs == nil
+                        ? "Use secure OAuth for private repositories and reviews."
+                        : "Verified session · tokens protected by Keychain")
+                }
+                Spacer(minLength: 0)
+                StatusPill(text: account.authenticatedAs == nil ? "Guest" : "Secure",
+                           color: account.authenticatedAs == nil ? GP.amber : GP.green)
+            }
+            if account.authenticatedAs == nil && account.isConfigured && !account.busy {
+                Button {
+                    account.signIn()
+                } label: {
+                    Label("Continue with GitHub", systemImage: "arrow.up.right.square")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            if account.busy {
+                ProgressView("Connecting to GitHub…").tint(GP.accent)
+            }
+            if let error = account.errorMessage {
+                MetaText(text: error)
+            }
+        }
     }
 }
 
@@ -105,11 +148,14 @@ private struct TodayScreen: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 20) {
-                GPHeader(
-                    eyebrow: "@\(store.username) · PUBLIC PREVIEW",
-                    title: "Your work,\nat a glance.",
-                    subtitle: "Read-only GitHub activity across a bounded sample of public projects."
+                GPWelcomeCard(
+                    eyebrow: "@\(store.username) · YOUR GITHUB SPACE",
+                    title: "Make space\nfor great work.",
+                    subtitle: "Pull requests, code and workflows, thoughtfully organised.",
+                    icon: "sparkles"
                 )
+                AccountStatusBanner()
+
                 HStack(spacing: 12) {
                     Metric(value: store.pullRequests.count, label: "Sample PRs",
                            symbol: "arrow.triangle.pull", tint: GP.accent)
@@ -138,8 +184,8 @@ private struct TodayScreen: View {
                 Surface {
                     Eyebrow(text: "INTEGRATION STATUS")
                     Text("iOS RC3 migration")
-                        .font(.title3.weight(.semibold)).foregroundStyle(.white)
-                    Text("Public browsing is connected to GitHub. OAuth, private repositories, reviews, merges and publishing are intentionally unavailable in this build.")
+                        .font(.title3.weight(.semibold)).foregroundStyle(GP.ink)
+                    Text("Public GitHub browsing works without login. Connect a verified GitHub App account to browse private repositories, source, PRs and workflows. Remote writes are not yet enabled.")
                         .font(.footnote).foregroundStyle(GP.secondary)
                     StatusPill(text: "Read-only alpha", color: GP.amber)
                 }
@@ -181,7 +227,7 @@ private struct ProtectedBrowseShortcut: View {
                 Surface {
                     Label("Browse " + mode, systemImage: "lock.shield.fill")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(GP.ink)
                     MetaText(text: "Verified GitHub App only · private data remains in memory")
                 }
             }
@@ -191,7 +237,7 @@ private struct ProtectedBrowseShortcut: View {
                 Label("Private " + mode + " locked", systemImage: "lock.fill")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(GP.secondary)
-                MetaText(text: "Connect your GitHub App from the profile sheet to enable protected browsing.")
+                MetaText(text: "Open Account to sign in securely with GitHub.")
             }
         }
     }
@@ -217,7 +263,7 @@ private struct ReviewsScreen: View {
                             Spacer(minLength: 4)
                             Text("#\(pull.number)").font(.caption.monospacedDigit()).foregroundStyle(GP.secondary)
                         }
-                        Text(pull.title).font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+                        Text(pull.title).font(.subheadline.weight(.semibold)).foregroundStyle(GP.ink)
                         MetaText(text: "@\(pull.user.login) · \(pull.head.ref) → \(pull.base.ref)")
                         SafeGitHubLink(title: "View PR on GitHub", url: pull.htmlURL)
                     }
@@ -242,7 +288,7 @@ private struct WorkflowCard: View {
                     tint: run.failed ? GP.red : run.running ? GP.blue : GP.green)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(run.title).font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white).lineLimit(2)
+                        .foregroundStyle(GP.ink).lineLimit(2)
                     MetaText(text: run.headBranch ?? "Unknown branch")
                 }
                 Spacer(minLength: 4)
@@ -307,7 +353,7 @@ private struct RepositoriesScreen: View {
                                 GPIndicator(icon: "folder.fill", tint: GP.accent)
                                 VStack(alignment: .leading, spacing: 5) {
                                     Text(repository.fullName).font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(GP.ink)
                                     if let summary = repository.description, !summary.isEmpty {
                                         Text(summary).font(.caption).foregroundStyle(GP.secondary)
                                             .lineLimit(2)
@@ -355,7 +401,7 @@ private struct RepositoryDetailsScreen: View {
                          subtitle: repository.fullName)
                 Surface {
                     Text(repository.description ?? "No description.")
-                        .foregroundStyle(.white)
+                        .foregroundStyle(GP.ink)
                     MetaText(text: "Default branch: \(repository.defaultBranch)")
                     MetaText(text: "Language: \(repository.language ?? "Unknown")")
                     MetaText(text: "Stars: \(repository.stargazersCount)")
@@ -368,7 +414,7 @@ private struct RepositoryDetailsScreen: View {
                     } label: {
                         Surface {
                             Label("Browse public files", systemImage: "folder.fill")
-                                .foregroundStyle(.white)
+                                .foregroundStyle(GP.ink)
                             MetaText(text: "Folders and small UTF-8 file previews")
                         }
                     }
@@ -378,7 +424,7 @@ private struct RepositoryDetailsScreen: View {
                     } label: {
                         Surface {
                             Label("Recent commits", systemImage: "point.3.connected.trianglepath.dotted")
-                                .foregroundStyle(.white)
+                                .foregroundStyle(GP.ink)
                             MetaText(text: "Up to 12 latest commits on the default branch")
                         }
                     }

@@ -58,7 +58,7 @@ struct AuthenticatedRepositoryHubScreen: View {
             HStack(spacing: 12) {
                 GPIndicator(icon: icon, tint: color)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+                    Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(GP.ink)
                     MetaText(text: summary)
                 }
                 Spacer()
@@ -106,7 +106,7 @@ struct AuthenticatedPullRequestsScreen: View {
                                         .font(.caption.monospacedDigit()).foregroundStyle(GP.secondary)
                                 }
                                 Text(pull.title).font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(GP.ink)
                                 MetaText(text: "@\(pull.user.login) · \(pull.head.ref) → \(pull.base.ref)")
                             }
                         }
@@ -187,7 +187,7 @@ struct AuthenticatedWorkflowRunsScreen: View {
                                         tint: run.failed ? GP.red : run.running ? GP.blue : GP.green)
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(run.title).font(.subheadline.weight(.semibold))
-                                            .foregroundStyle(.white)
+                                            .foregroundStyle(GP.ink)
                                         MetaText(text: run.headBranch ?? "Unknown branch")
                                     }
                                     Spacer(minLength: 4)
