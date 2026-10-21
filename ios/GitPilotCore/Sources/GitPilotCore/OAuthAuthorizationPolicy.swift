@@ -11,14 +11,19 @@ public enum OAuthAuthorizationPolicy {
     }
 
     public static func authorizeURL(
-        clientID: String, callback: URL, state: String, codeChallenge: String
+        clientID: String, gateway: URL, callback: URL, state: String, codeChallenge: String
     ) throws -> URL {
         guard !clientID.isEmpty, clientID.utf8.count <= 160,
               clientID.utf8.allSatisfy({ byte in
                   (48...57).contains(Int(byte)) || (65...90).contains(Int(byte)) ||
                   (97...122).contains(Int(byte)) || byte == 46
               }),
+              GitHubOAuthGatewayPolicy.trustedBackend(gateway),
+              gateway.path.isEmpty || gateway.path == "/",
               OAuthValidation.validCallbackURL(callback),
+              callback.host?.lowercased() == gateway.host?.lowercased(),
+              callback.scheme?.lowercased() == gateway.scheme?.lowercased(),
+              callback.port == gateway.port,
               state.count >= 32 && state.count <= 128,
               codeChallenge.count >= 43 && codeChallenge.count <= 128,
               [state, codeChallenge].allSatisfy({ value in
