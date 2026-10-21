@@ -3,13 +3,14 @@ import Foundation
 @testable import GitPilotCore
 
 final class OAuthAuthorizationPolicyTests: XCTestCase {
+    private let gateway = URL(string: "https://login.gitpilot.example.net")!
     private let callback = URL(string: "https://login.gitpilot.example.net/oauth/callback")!
     private let state = String(repeating: "s", count: 43)
     private let challenge = String(repeating: "c", count: 43)
 
     func testSecureAuthorizationURLHasOnlyPKCEAndExpectedParameters() throws {
         let result = try OAuthAuthorizationPolicy.authorizeURL(
-            clientID: "Iv1.publicClient123", callback: callback, state: state,
+            clientID: "Iv1.publicClient123", gateway: gateway, callback: callback, state: state,
             codeChallenge: challenge)
         XCTAssertEqual(result.scheme, "https")
         XCTAssertEqual(result.host, "github.com")
@@ -32,7 +33,7 @@ final class OAuthAuthorizationPolicyTests: XCTestCase {
             "https://login.gitpilot.example.net/other"
         ] {
             XCTAssertThrowsError(try OAuthAuthorizationPolicy.authorizeURL(
-                clientID: "Iv1.publicClient123", callback: URL(string: url)!,
+                clientID: "Iv1.publicClient123", gateway: gateway, callback: URL(string: url)!,
                 state: state, codeChallenge: challenge))
         }
     }
@@ -41,10 +42,10 @@ final class OAuthAuthorizationPolicyTests: XCTestCase {
         for invalid in ["", "short", "bad space", String(repeating: "x", count: 129),
                         String(repeating: "x", count: 42) + "\n"] {
             XCTAssertThrowsError(try OAuthAuthorizationPolicy.authorizeURL(
-                clientID: "Iv1.publicClient123", callback: callback,
+                clientID: "Iv1.publicClient123", gateway: gateway, callback: callback,
                 state: invalid, codeChallenge: challenge))
             XCTAssertThrowsError(try OAuthAuthorizationPolicy.authorizeURL(
-                clientID: "Iv1.publicClient123", callback: callback,
+                clientID: "Iv1.publicClient123", gateway: gateway, callback: callback,
                 state: state, codeChallenge: invalid))
         }
     }
@@ -53,7 +54,7 @@ final class OAuthAuthorizationPolicyTests: XCTestCase {
         for id in ["", "client secret", "Iv1.good&redirect_uri=https://evil.test",
                    "Iv1.bad\r\nHeader: evil", String(repeating: "x", count: 161)] {
             XCTAssertThrowsError(try OAuthAuthorizationPolicy.authorizeURL(
-                clientID: id, callback: callback, state: state,
+                clientID: id, gateway: gateway, callback: callback, state: state,
                 codeChallenge: challenge))
         }
     }
