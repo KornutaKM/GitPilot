@@ -66,7 +66,7 @@ struct PublicDirectoryScreen: View {
                 GPIndicator(icon: icon, tint: tint)
                 VStack(alignment: .leading, spacing: 5) {
                     Text(entry.name).font(.subheadline.weight(.medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(GP.ink)
                         .lineLimit(2)
                     MetaText(text: entry.isDirectory ? "Folder" :
                         entry.isFile ? "\(entry.size ?? 0) bytes" : entry.type)
@@ -117,7 +117,7 @@ struct PublicFilePreviewScreen: View {
                     ScrollView(.horizontal) {
                         Text(preview.text)
                             .font(.system(size: 12, design: .monospaced))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(GP.ink)
                             .textSelection(.enabled)
                             .padding(18)
                     }
@@ -166,7 +166,7 @@ struct PublicCommitsScreen: View {
                 ForEach(commits) { commit in
                     Surface {
                         Text(commit.subject).font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(GP.ink)
                         MetaText(text: String(commit.sha.prefix(10)))
                         if let url = PublicGitHubAPI.safeGitHubWebURL(commit.htmlURL) {
                             Link("Inspect commit on GitHub", destination: url)
