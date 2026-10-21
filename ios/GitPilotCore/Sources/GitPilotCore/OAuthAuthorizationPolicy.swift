@@ -14,7 +14,10 @@ public enum OAuthAuthorizationPolicy {
         clientID: String, callback: URL, state: String, codeChallenge: String
     ) throws -> URL {
         guard !clientID.isEmpty, clientID.utf8.count <= 160,
-              clientID.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == ".") }),
+              clientID.utf8.allSatisfy({ byte in
+                  (48...57).contains(Int(byte)) || (65...90).contains(Int(byte)) ||
+                  (97...122).contains(Int(byte)) || byte == 46
+              }),
               OAuthValidation.validCallbackURL(callback),
               state.count >= 32 && state.count <= 128,
               codeChallenge.count >= 43 && codeChallenge.count <= 128,
