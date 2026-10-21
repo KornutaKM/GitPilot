@@ -133,7 +133,7 @@ struct EncryptedDraftsScreen: View {
         error = nil
         guard authorized, let login = account.authenticatedAs else { return }
         do { drafts = try StagedDraftVault.load(for: login) }
-        catch { error = error.localizedDescription }
+        catch { self.error = error.localizedDescription }
     }
 
     @MainActor
@@ -144,7 +144,7 @@ struct EncryptedDraftsScreen: View {
             try StagedDraftVault.save(for: login, edits: next)
             drafts = next
             status = "Local draft deleted; GitHub was not changed."
-        } catch { error = error.localizedDescription }
+        } catch { self.error = error.localizedDescription }
     }
 
     @MainActor
@@ -154,6 +154,6 @@ struct EncryptedDraftsScreen: View {
             try StagedDraftVault.erase()
             drafts = []
             status = "All encrypted local drafts were erased."
-        } catch { error = error.localizedDescription }
+        } catch { self.error = error.localizedDescription }
     }
 }
