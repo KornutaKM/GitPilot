@@ -137,6 +137,7 @@ struct EncryptedDraftEditor: View {
             if openedAs == nil {
                 openedAs = account.authenticatedAs
                 openedRevision = account.authRevision
+                restoreDraft()
             }
         }
         .onChange(of: account.authRevision) { _ in
@@ -158,6 +159,29 @@ struct EncryptedDraftEditor: View {
         case .removed: return GP.red
         case .unchanged: return GP.secondary
         case .warning: return GP.amber
+        }
+    }
+
+    @MainActor
+    private func restoreDraft() {
+        guard stillAuthorized, let login = account.authenticatedAs,
+              let sourceSHA = preview.sha,
+              let id = Int(exactly: repository.id) else { return }
+        do {
+            let drafts = try StagedDraftVault.load(for: login)
+            if let existing = drafts.first(where: {
+                $0.repositoryID == id && $0.path == preview.path && $0.branch == branch
+            }) {
+                if existing.originalBlobSHA == sourceSHA &&
+                   existing.originalContent == preview.text {
+                    text = existing.newContent
+                    message = "Restored an encrypted draft saved earlier on this device."
+                } else {
+                    errorMessage = "A saved draft refers to a different Git blob. Review current source before replacing it."
+                }
+            }
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
