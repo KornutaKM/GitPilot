@@ -73,6 +73,14 @@ struct AccountCenterScreen: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
+                        NavigationLink {
+                            EncryptedDraftsScreen()
+                        } label: {
+                            Label("Review encrypted local drafts", systemImage: "lock.doc.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
 
                         Button(role: .destructive) {
                             account.signOut()
